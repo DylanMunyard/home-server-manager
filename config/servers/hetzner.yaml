@@ -1,0 +1,8 @@
+name: bfstats
+description: Side project — Hetzner cloud
+servers:
+  - id:   bfstats
+    host: ${HETZNER_HOST}
+    user: root
+    key:  ~/.ssh/hetzner
+    passphrase: ${HETZNER_PASSPHRASE}

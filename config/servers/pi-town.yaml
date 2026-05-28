@@ -1,0 +1,9 @@
+name: pi-town
+description: Raspberry Pi k3s cluster
+defaults:
+  user: root
+  key:  ~/.ssh/id_ed25519
+servers:
+  - { id: master,  host: 192.168.1.220, name: "master"  }
+  - { id: level-2, host: 192.168.1.221, name: "level 2" }
+  - { id: level-1, host: 192.168.1.222, name: "level 1" }
