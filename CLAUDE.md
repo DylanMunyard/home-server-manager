@@ -11,6 +11,9 @@ api/                Fastify + ssh2 + WebSocket — TypeScript ESM, tsx watch
   src/<feature>/    feature folders directly under src/ (see "Conventions")
 ui/                 React + Vite + xterm.js — TypeScript
   src/<feature>/    same rule
+  src/App.tsx       slim chooser: renders DesktopApp or MobileApp by viewport
+  src/desktop/      desktop shell (tri-column rail/stage/rail)
+  src/mobile/       mobile shell (bottom tab bar + stack-style navigation)
 config/
   servers/*.yaml    one file per server group (see "Server YAML")
   scripts/*.sh      one file per runbook (see "Runbook scripts")
@@ -160,11 +163,25 @@ quick checks.
   paths are guesses the user is supposed to verify before running a script
   against any real host. Don't silently "fix" them.
 
+## Mobile vs desktop
+
+- `useIsMobile()` (matchMedia `max-width: 767px`) decides which shell renders.
+- Both shells **reuse the same hooks** (`useGroups`, `useRunbook`,
+  `useSshStream`, `useShellStream`) and the same `Terminal` component — only
+  presentation differs. If you add a hook that backs a feature, both shells
+  pick it up; don't fork hook logic per shell.
+- Mobile CSS tokens are scoped to `.m-app` (cream "paper" palette matched to
+  the mobile design); desktop tokens live on `:root`. Adding global tokens
+  affects desktop only — mobile must be widened explicitly.
+- Mobile-only screens that aren't present on desktop: `RunningScreen`,
+  `ShellScreen` (full-screen variants of the desktop terminal/shell modes).
+
 ## What's intentionally out of scope (don't add without asking)
 
 - App-level auth (LAN-fronted only)
-- History / audit log of runs
+- History / audit log of runs (no "logs" tab in mobile either — that's why
+  the design's 3-tab bar is implemented as 2)
 - Persistent DB of any kind
-- Multi-node UI (backend already supports it — UI is single-node v1)
+- Multi-node UI / fan-out (backend already supports it — UI is single-node v1)
 - The pencil/paper hand-drawn aesthetic from the original design wireframes
   (that was the medium; the chosen look is brutalist-minimalist)
