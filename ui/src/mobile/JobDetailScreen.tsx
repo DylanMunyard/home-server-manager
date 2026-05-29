@@ -1,4 +1,5 @@
-import type { Job, Runbook } from '../shared/api.ts';
+import { useState } from 'react';
+import { testAlert, type Job, type Runbook } from '../shared/api.ts';
 import { condText, humanizeCron, uiState } from '../jobs/cron.ts';
 
 type Props = {
@@ -22,6 +23,15 @@ function Peek({ runbook }: { runbook: Runbook | null }) {
 }
 
 export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, onRun }: Props) {
+  const [alertBusy, setAlertBusy] = useState(false);
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const sendTestAlert = async () => {
+    setAlertBusy(true);
+    setAlertMsg(null);
+    const r = await testAlert(job.run, job.target);
+    setAlertBusy(false);
+    setAlertMsg(r.sent ? 'SENT ✓' : 'FAILED');
+  };
   const state = uiState(job.state.running);
   const { human } = humanizeCron(job.schedule);
   const notifyOn = job.notify?.on ?? [];
@@ -121,7 +131,11 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
         </div>
       </div>
 
-      <div className="m-actionbar">
+      <div className="m-actionbar two">
+        <button className="m-run-btn outline small" disabled={alertBusy} onClick={sendTestAlert}
+          title="Send a test ntfy alert simulating a failure — nothing runs">
+          {alertBusy ? 'SENDING…' : alertMsg ?? 'TEST ALERT'}
+        </button>
         <button className="m-run-btn" disabled={running} onClick={onRun}>
           {running ? 'RUNNING…' : 'RUN CHECK ▸'}
         </button>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Runbook, ServerSummary } from '../shared/api.ts';
+import { testAlert, type Runbook, type ServerSummary } from '../shared/api.ts';
 
 type Tab = 'script' | 'props';
 
@@ -13,7 +13,17 @@ type Props = {
 
 export function BookDetailScreen({ runbook, target, onPickTarget, onRun, canRun }: Props) {
   const [tab, setTab] = useState<Tab>('script');
+  const [alertBusy, setAlertBusy] = useState(false);
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
   if (!runbook) return <div className="m-empty">loading…</div>;
+
+  const sendTestAlert = async () => {
+    setAlertBusy(true);
+    setAlertMsg(null);
+    const r = await testAlert(runbook.id, target?.id ?? null);
+    setAlertBusy(false);
+    setAlertMsg(r.sent ? 'SENT ✓' : 'FAILED');
+  };
 
   return (
     <>
@@ -39,7 +49,15 @@ export function BookDetailScreen({ runbook, target, onPickTarget, onRun, canRun 
           : <PropsView runbook={runbook} target={target} />}
       </div>
 
-      <div className="m-actionbar">
+      <div className="m-actionbar two">
+        <button
+          className="m-run-btn outline small"
+          disabled={alertBusy}
+          onClick={sendTestAlert}
+          title="Send a test ntfy alert simulating a failure — nothing runs"
+        >
+          {alertBusy ? 'SENDING…' : alertMsg ?? 'TEST ALERT'}
+        </button>
         <button
           className="m-run-btn"
           disabled={!canRun}

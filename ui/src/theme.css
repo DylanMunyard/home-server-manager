@@ -218,6 +218,7 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .job-head h2 { margin: 4px 0 0; font-size: 24px; font-weight: 700; letter-spacing: 0.01em; }
 .job-head .desc { color: var(--ink-2); font-size: 12px; max-width: 70ch; margin-top: 6px; }
 .job-head-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.job-alert-msg { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); }
 .monitor-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; background: var(--ink-2); color: var(--bg); padding: 3px 8px; }
 
 .job-meta { display: flex; flex-wrap: wrap; gap: 28px; margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); }

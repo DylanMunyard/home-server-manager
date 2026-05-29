@@ -123,3 +123,22 @@ export async function runJob(id: string): Promise<Job> {
   const r = await apiPost(`/api/jobs/${encodeURIComponent(id)}/run`, 'failed to run job');
   return r.json();
 }
+
+// Fires a synthetic "script failed" ntfy alert (no run, no remediation) so you
+// can verify alert delivery from the runbook page. Returns {sent, reason?} for
+// 2xx and the 502/503 cases alike, so the caller can show the actual reason.
+export async function testAlert(
+  runbook: string | null,
+  target: string | null,
+): Promise<{ sent: boolean; reason?: string }> {
+  const r = await fetch('/api/alerts/test', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ runbook: runbook ?? undefined, target: target ?? undefined }),
+  });
+  if (r.status === 401) {
+    window.location.href = '/api/auth/login';
+    return new Promise(() => {});
+  }
+  return r.json();
+}

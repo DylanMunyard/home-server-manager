@@ -3,7 +3,7 @@ import { useJobs } from './useJobs.ts';
 import { useRunbook } from '../runbooks/useRunbooks.ts';
 import { JobFlow } from './JobFlow.tsx';
 import { humanizeCron, uiState } from './cron.ts';
-import type { Job } from '../shared/api.ts';
+import { testAlert, type Job } from '../shared/api.ts';
 
 function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: () => void }) {
   const state = uiState(job.state.running);
@@ -28,7 +28,18 @@ function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: ()
 export function JobsView() {
   const { jobs, error, run, runningId } = useJobs();
   const [selId, setSelId] = useState<string | null>(null);
+  const [alertBusy, setAlertBusy] = useState(false);
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const job = useMemo(() => jobs.find((j) => j.id === selId) ?? jobs[0] ?? null, [jobs, selId]);
+
+  const sendTestAlert = async () => {
+    if (!job) return;
+    setAlertBusy(true);
+    setAlertMsg(null);
+    const r = await testAlert(job.run, job.target);
+    setAlertBusy(false);
+    setAlertMsg(r.sent ? 'test alert sent ✓' : `alert failed: ${r.reason ?? 'unknown'}`);
+  };
 
   const checkRunbook = useRunbook(job?.run ?? null);
   const remediateRunbook = useRunbook(job?.then ?? null);
@@ -51,7 +62,7 @@ export function JobsView() {
           )}
           <ul className="list">
             {jobs.map((j) => (
-              <JobRow key={j.id} job={j} active={j.id === job?.id} onPick={() => setSelId(j.id)} />
+              <JobRow key={j.id} job={j} active={j.id === job?.id} onPick={() => { setSelId(j.id); setAlertMsg(null); }} />
             ))}
           </ul>
         </div>
@@ -78,6 +89,14 @@ export function JobsView() {
                   >
                     {isRunning ? 'Running…' : 'Run now'}
                   </button>
+                  <button
+                    disabled={alertBusy}
+                    onClick={sendTestAlert}
+                    title="Send a test ntfy alert simulating this job's check failing — nothing runs, no remediation"
+                  >
+                    {alertBusy ? 'Sending…' : 'Test alert'}
+                  </button>
+                  {alertMsg && <span className="job-alert-msg">{alertMsg}</span>}
                   {!job.then && <span className="monitor-tag">monitor only</span>}
                 </div>
               </div>

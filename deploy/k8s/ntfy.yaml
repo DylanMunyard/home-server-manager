@@ -38,8 +38,18 @@ data:
     cache-duration: "12h"
     auth-file: "/var/lib/ntfy/auth.db"
     # Locked down: nobody reads or writes without an explicit grant (the `hsm`
-    # user created in setup). Keeps the topic private even though it's exposed.
+    # user created in setup). Anonymous can't publish, so can't create topics.
     auth-default-access: "deny-all"
+    # No self-registration — only users created via `ntfy user add` exist.
+    enable-signup: false
+    # Login stays on so the API/phone can authenticate (token / user+pass).
+    enable-login: true
+    # No public web app: the phone uses the native ntfy app and our API uses the
+    # HTTP API — neither needs the browser UI, and disabling it removes the
+    # "anyone can poke at it" surface entirely. The publish/subscribe API is
+    # unaffected. Set back to "/" if you ever want the web UI (gate it with
+    # Cloudflare Access if so).
+    web-root: disable
     # Sits behind the Cloudflare Tunnel.
     behind-proxy: true
 ---

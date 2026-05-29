@@ -5,6 +5,7 @@ import { RunbookList } from '../runbooks/RunbookList.tsx';
 import { ScriptViewer } from '../runbooks/ScriptViewer.tsx';
 import { Terminal, type TerminalHandle } from '../terminal/Terminal.tsx';
 import { JobsView } from '../jobs/JobsView.tsx';
+import { testAlert } from '../shared/api.ts';
 import { useGroups, useServerDetail } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
 import { useSshStream } from '../terminal/useSshStream.ts';
@@ -34,6 +35,8 @@ export function DesktopApp() {
   const { runbooks } = useRunbooks();
   const [mode, setMode] = useState<Mode>('runbook');
   const [topView, setTopView] = useState<TopView>('console');
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [alertBusy, setAlertBusy] = useState(false);
   const [serverId, setServerId] = useState<string | null>(null);
   const [runbookId, setRunbookId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -99,6 +102,14 @@ export function DesktopApp() {
     if (mode === 'shell' && shellState === 'connected') sendResize(size.cols, size.rows);
   }, [mode, shellState, sendResize]);
 
+  const sendTestAlert = useCallback(async () => {
+    setAlertBusy(true);
+    setAlertMsg(null);
+    const r = await testAlert(runbookId, serverId);
+    setAlertBusy(false);
+    setAlertMsg(r.sent ? 'test alert sent ✓' : `alert failed: ${r.reason ?? 'unknown'}`);
+  }, [runbookId, serverId]);
+
   return (
     <div className="app">
       <header className="masthead">
@@ -144,7 +155,15 @@ export function DesktopApp() {
                   Run
                 </button>
                 {isRunLive && <button onClick={cancelRun}>Cancel</button>}
+                <button
+                  disabled={!runbookId || alertBusy}
+                  onClick={sendTestAlert}
+                  title="Send a test ntfy alert that simulates this script failing — nothing runs, no remediation"
+                >
+                  {alertBusy ? 'Sending…' : 'Test alert'}
+                </button>
                 <div className="spacer" />
+                {alertMsg && <span className="status">{alertMsg}</span>}
                 <span className="status" data-state={runState}>{runStatusLabel}</span>
               </div>
 
