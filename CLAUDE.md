@@ -1,8 +1,8 @@
 # home-server-mgr — agent instructions
 
 Web UI + API to SSH into the user's home/side-project servers and stream script
-("runbook") output live. Personal-infra scope — single user, LAN-fronted, no
-public exposure.
+("runbook") output live. Personal-infra scope — single user. Internet-exposed at
+`mgr.munyard.dev` via a Cloudflare Tunnel, gated by Discord OAuth (see "Auth").
 
 ## Layout
 

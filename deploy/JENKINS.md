@@ -56,22 +56,36 @@ kubectl -n home-server-mgr create secret generic home-server-mgr-ssh \
 kubectl -n home-server-mgr rollout restart deployment/home-server-mgr-api
 ```
 
-If `config/servers/*.yaml` uses any `${VAR}` interpolations (e.g. hosts,
-passphrases, passwords), put one entry per var in `home-server-mgr-secrets`
-— the API pod's `envFrom: secretRef` pulls every key in as an env var, so
-**no Deployment edit is needed when you add a new `${VAR}`**.
+This same Secret holds **two groups of keys**, both pulled in by the API pod's
+`envFrom: secretRef` (so **no Deployment edit is needed** when you add a key):
+
+1. Any `${VAR}` interpolations used in `config/servers/*.yaml` (hosts,
+   passphrases, passwords) — key name must match the `${VAR}` name exactly.
+2. The **Discord OAuth + session** vars the auth layer requires:
+   `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`,
+   `SESSION_SECRET` (≥32 chars), `SESSION_SALT` (exactly 16 chars). The API
+   **exits at startup** if any is missing/invalid (`auth.config.ts` fails loud),
+   so this Secret is effectively required, not optional. `PUBLIC_URL` is *not*
+   here — it's non-secret and lives in `api-deployment.yaml`.
 
 ```bash
 kubectl -n home-server-mgr create secret generic home-server-mgr-secrets \
   --from-literal=HETZNER_HOST='<value>' \
   --from-literal=HETZNER_PASSPHRASE='<value>' \
+  --from-literal=DISCORD_CLIENT_ID='<discord app client id>' \
+  --from-literal=DISCORD_CLIENT_SECRET='<discord app client secret>' \
+  --from-literal=ALLOWED_DISCORD_IDS='<your discord user id>' \
+  --from-literal=SESSION_SECRET="$(openssl rand -hex 24)" \
+  --from-literal=SESSION_SALT="$(openssl rand -hex 8)" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n home-server-mgr rollout restart deployment/home-server-mgr-api
 ```
 
-The Secret key names must match the `${VAR}` names in the YAML exactly
-(case-sensitive). Re-run the same command with the full set to add or
-replace keys later.
+The `create … --dry-run=client -o yaml | kubectl apply` form **replaces the
+whole Secret**, so always re-run it with the *full* set of keys — drop one and
+it's gone. (`openssl rand -hex 8` is exactly 16 chars; `-hex 24` is 48, ≥32.)
+Rotating `SESSION_SECRET`/`SESSION_SALT` invalidates existing login cookies —
+you just sign in again.
 
 Verify:
 
@@ -79,6 +93,47 @@ Verify:
 kubectl -n home-server-mgr get secret home-server-mgr-ssh -o jsonpath='{.data.id_ed25519}' | base64 -d | head -1
 # -> -----BEGIN OPENSSH PRIVATE KEY-----
 ```
+
+---
+
+## 2b. Cloudflare Tunnel (public ingress)
+
+`mgr.munyard.dev` is served by a **dedicated** Cloudflare Tunnel owned by this
+app (`deploy/k8s/cloudflared.yaml`) — not shared with other projects, so the
+whole deployment lives in this repo. The tunnel terminates at the UI Service
+(`home-server-mgr-ui:80`); nginx there serves the SPA and proxies `/api` + `/ws`
+to the API, and the API enforces Discord auth on those routes.
+
+One-time setup (from your laptop, with `cloudflared` installed and admin
+kubeconfig to the cluster):
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create home-server-mgr      # prints a Tunnel ID + creds file path
+
+# Tunnel credentials Secret (the creds JSON is the secret; the id is not).
+kubectl -n home-server-mgr create secret generic tunnel-credentials \
+  --from-file=credentials.json=$HOME/.cloudflared/<TUNNEL_ID>.json
+
+# Point the public hostname at this tunnel (creates the DNS CNAME in Cloudflare).
+cloudflared tunnel route dns home-server-mgr mgr.munyard.dev
+```
+
+The Tunnel ID is committed in `deploy/k8s/cloudflared.yaml` (it's not a
+secret — only `credentials.json` is). Update it there only if you recreate the
+tunnel. Apply the manifest:
+
+```bash
+kubectl apply -f deploy/k8s/cloudflared.yaml
+kubectl -n home-server-mgr rollout status deployment/cloudflared --timeout=120s
+```
+
+Like `rbac.yaml`, this manifest is applied **manually** — the Jenkinsfile only
+applies `api-deployment.yaml` / `ui-deployment.yaml` by name, so the tunnel
+isn't touched by CI once it's up. Confirm `PUBLIC_URL` in `api-deployment.yaml`
+matches the hostname (`https://mgr.munyard.dev`), and that
+`mgr.munyard.dev/api/auth/callback` is registered as an OAuth2 redirect URL in
+the Discord app.
 
 ---
 
@@ -142,7 +197,8 @@ mounts.
 | Secret | Keys | Used by |
 |--------|------|---------|
 | `home-server-mgr-ssh` | `id_ed25519` (and any other private keys referenced from YAML) | Mounted at `/home/app/.ssh/` |
-| `home-server-mgr-secrets` | One key per `${VAR}` used in `config/servers/*.yaml` (e.g. `HETZNER_HOST`, `HETZNER_PASSPHRASE`). Key name must match `${VAR}` name exactly. | `envFrom: secretRef` on the API pod |
+| `home-server-mgr-secrets` | One key per `${VAR}` in `config/servers/*.yaml` (e.g. `HETZNER_HOST`, `HETZNER_PASSPHRASE`) **plus** the auth keys `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`, `SESSION_SECRET`, `SESSION_SALT`. | `envFrom: secretRef` on the API pod |
+| `tunnel-credentials` | `credentials.json` (Cloudflare Tunnel creds) | Mounted at `/etc/cloudflared/creds` on the cloudflared pod |
 
 ---
 
@@ -164,9 +220,8 @@ needed.
 
 ## How to access the UI
 
-The UI Service is `ClusterIP`. Pick one:
+The UI Service is `ClusterIP`. In production it's reached publicly via the
+Cloudflare Tunnel at **https://mgr.munyard.dev** (see "2b. Cloudflare Tunnel").
+For local cluster debugging without the tunnel:
 
 - Port-forward (quick test): `kubectl -n home-server-mgr port-forward svc/home-server-mgr-ui 5780:80`
-- LoadBalancer / NodePort: edit `ui-deployment.yaml` Service `spec.type`
-- Ingress: add an Ingress resource pointing at `home-server-mgr-ui:80`
-  (intentionally not bundled — depends on your cluster's ingress controller)

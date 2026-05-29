@@ -1,0 +1,88 @@
+# Cloudflare Tunnel — public ingress for mgr.munyard.dev.
+#
+# Self-contained, in the home-server-mgr namespace: this app owns its own
+# tunnel rather than sharing one with unrelated apps, so the whole deployment
+# (app + ingress) lives in this one repo.
+#
+# The tunnel terminates at the UI Service. nginx there serves the SPA and
+# reverse-proxies /api + /ws to the API, so this single route exposes the whole
+# app. Auth (Discord OAuth) is enforced by the API on every /api and /ws route.
+#
+# One-time setup (see deploy/JENKINS.md "Cloudflare Tunnel"):
+#   cloudflared tunnel login
+#   cloudflared tunnel create home-server-mgr
+#   # put the printed tunnel id below (it's not a secret — the creds file is)
+#   kubectl -n home-server-mgr create secret generic tunnel-credentials \
+#     --from-file=credentials.json=$HOME/.cloudflared/<TUNNEL_ID>.json
+#   cloudflared tunnel route dns home-server-mgr mgr.munyard.dev
+#   kubectl apply -f deploy/k8s/cloudflared.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: home-server-mgr
+data:
+  config.yaml: |
+    tunnel: 900275d4-c01f-42d9-9be3-7c0cfda1ada3
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+    ingress:
+      - hostname: mgr.munyard.dev
+        service: http://home-server-mgr-ui.home-server-mgr.svc.cluster.local:80
+      - service: http_status:404
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: home-server-mgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config.yaml
+            - run
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            failureThreshold: 1
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared
+              readOnly: true
+            - name: creds
+              mountPath: /etc/cloudflared/creds
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+        - name: creds
+          secret:
+            secretName: tunnel-credentials
