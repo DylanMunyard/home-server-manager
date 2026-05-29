@@ -94,7 +94,7 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .list-row.active { background: var(--accent); }
 .list-row .dot { width: 8px; height: 8px; background: var(--ink); }
 .list-row .name { font-size: 13px; font-weight: 500; }
-.list-row .sub  { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+.list-row .sub  { font-size: 11px; color: var(--ink-3); margin-top: 2px; white-space: pre-line; }
 .list-row.active .sub { color: var(--ink-2); }
 .list-row .right { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.12em; }
 
@@ -128,7 +128,7 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .stage-head h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
 .stage-head .target { font-size: 12px; color: var(--ink-2); }
 .stage-head .target b { color: var(--ink); }
-.stage-head .desc { color: var(--ink-2); font-size: 12px; max-width: 70ch; }
+.stage-head .desc { color: var(--ink-2); font-size: 12px; max-width: 70ch; white-space: pre-line; }
 
 .stage-actions { display: flex; gap: 10px; align-items: center; padding: 14px 22px; border-bottom: 1px solid var(--line); }
 .stage-actions .spacer { flex: 1; }
@@ -216,9 +216,13 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .job-head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .job-head .meta { font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-3); }
 .job-head h2 { margin: 4px 0 0; font-size: 24px; font-weight: 700; letter-spacing: 0.01em; }
-.job-head .desc { color: var(--ink-2); font-size: 12px; max-width: 70ch; margin-top: 6px; }
+.job-head .desc { color: var(--ink-2); font-size: 12px; max-width: 70ch; margin-top: 6px; white-space: pre-line; }
 .job-head-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
 .job-alert-msg { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); }
+.job-run-outcome { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; padding: 4px 8px; border: 1px solid currentColor; }
+.job-run-outcome.ok   { color: var(--ok, #2a7a3a); }
+.job-run-outcome.warn { color: var(--warn, #a06414); }
+.job-run-outcome.err  { color: var(--err); }
 .monitor-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; background: var(--ink-2); color: var(--bg); padding: 3px 8px; }
 
 .job-meta { display: flex; flex-wrap: wrap; gap: 28px; margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); }
@@ -252,7 +256,7 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .flow-book-head { display: flex; align-items: center; gap: 12px; }
 .flow-book-name { font-size: 16px; font-weight: 700; }
 .flow-book-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); border: 1px solid var(--line-soft); padding: 2px 6px; }
-.flow-book-desc { font-size: 12px; color: var(--ink-2); margin-top: 5px; max-width: 60ch; }
+.flow-book-desc { font-size: 12px; color: var(--ink-2); margin-top: 5px; max-width: 60ch; white-space: pre-line; }
 .flow-book .script { margin-top: 8px; border: 1px solid var(--line); max-height: 220px; }
 .flow-book-missing { margin-top: 8px; color: var(--ink-3); font-style: italic; }
 .flow-meta { font-size: 11px; color: var(--ink-3); margin-top: 8px; }
@@ -349,7 +353,7 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .m-row.unsel .m-sq { background: transparent; border: 1.5px solid var(--m-ink); }
 .m-row-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .m-row-nm { font-size: 15px; font-weight: 600; color: var(--m-ink); line-height: 1.1; }
-.m-row-sub { font-size: 11px; color: var(--m-ink-3); letter-spacing: 0.02em; word-break: break-all; }
+.m-row-sub { font-size: 11px; color: var(--m-ink-3); letter-spacing: 0.02em; word-break: break-all; white-space: pre-line; }
 .m-row-tag { font-size: 10px; color: var(--m-ink-3); letter-spacing: 0.18em; text-transform: uppercase; }
 
 /* Group header */
@@ -396,7 +400,7 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .m-dhead-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .m-dhead-ttl { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
 .m-dhead-ttl.small { font-size: 16px; }
-.m-dhead-desc { font-size: 12px; color: var(--m-ink-2); margin-top: 6px; line-height: 1.45; }
+.m-dhead-desc { font-size: 12px; color: var(--m-ink-2); margin-top: 6px; line-height: 1.45; white-space: pre-line; }
 .m-dhead-target { margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .m-chip {
@@ -483,6 +487,16 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .m-run-btn:disabled { opacity: 0.4; }
 .m-run-btn.outline { background: transparent; }
 .m-run-btn.small { font-size: 11px; padding: 12px 0; }
+.m-jobout {
+  padding: 10px 16px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em;
+  border-top: 1px solid var(--m-line);
+  background: var(--m-paper);
+  flex-shrink: 0;
+}
+.m-jobout.ok   { color: var(--m-ok, #2a7a3a); }
+.m-jobout.warn { color: var(--m-warn, #a06414); }
+.m-jobout.err  { color: var(--m-err, #a12d2d); }
 
 /* Search */
 .m-search {
@@ -540,7 +554,7 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .m-jkind.ok { color: var(--m-ok); }
 .m-jkind.err { color: var(--m-err); }
 .m-jbk { font-size: 16px; font-weight: 700; color: var(--m-ink); margin-top: 4px; }
-.m-jbd { font-size: 11.5px; color: var(--m-ink-3); margin-top: 4px; line-height: 1.45; }
+.m-jbd { font-size: 11.5px; color: var(--m-ink-3); margin-top: 4px; line-height: 1.45; white-space: pre-line; }
 .m-jpeek { margin-top: 9px; background: var(--m-term-bg); color: var(--m-term-fg); padding: 8px 11px; font-size: 10.5px; line-height: 1.5; overflow-x: auto; }
 .m-jpeek .ln { white-space: pre; }
 .m-jpeek .ln.com { color: var(--m-ink-4); font-style: italic; }

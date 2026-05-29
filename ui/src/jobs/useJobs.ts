@@ -12,13 +12,18 @@ export function useJobs() {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Trigger a job off-schedule, then refresh the list so last-run state updates.
-  const run = useCallback(async (id: string) => {
+  // Trigger a job off-schedule. Returns the updated job so callers can show
+  // the immediate outcome (pass / failed / remediation ran) without waiting
+  // for the reload's render cycle.
+  const run = useCallback(async (id: string): Promise<Job | null> => {
     setRunning(id);
     try {
-      await runJob(id);
+      const updated = await runJob(id);
+      setJobs((prev) => prev.map((j) => (j.id === id ? updated : j)));
+      return updated;
     } catch (e) {
       setError((e as Error).message);
+      return null;
     } finally {
       setRunning(null);
       reload();

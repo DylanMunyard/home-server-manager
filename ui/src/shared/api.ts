@@ -38,12 +38,24 @@ export type Runbook = RunbookSummary & { contents: string };
 export type JobTrigger = { exit?: 'nonzero' | 'zero' | number; stdoutContains?: string };
 export type JobNotify = { on: ('action' | 'error')[]; priority?: string };
 
+export type RunResult = {
+  connected: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  signal?: string | null;
+  error?: string;
+  durationMs: number;
+};
+
 // Mirrors the API's in-memory JobRunState. No history — single last-run snapshot.
 export type JobRunState = {
   running: boolean;
   lastRunAt?: string;
   lastDurationMs?: number;
+  lastCheck?: RunResult;
   lastTriggered?: boolean;
+  lastAction?: RunResult;
   lastError?: string;
 };
 

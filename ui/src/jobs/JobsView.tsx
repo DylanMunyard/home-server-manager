@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useJobs } from './useJobs.ts';
 import { useRunbook } from '../runbooks/useRunbooks.ts';
 import { JobFlow } from './JobFlow.tsx';
-import { humanizeCron, uiState } from './cron.ts';
+import { humanizeCron, summarizeJobRun, uiState } from './cron.ts';
 import { testAlert, type Job } from '../shared/api.ts';
 
 function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: () => void }) {
@@ -27,7 +28,9 @@ function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: ()
 
 export function JobsView() {
   const { jobs, error, run, runningId } = useJobs();
-  const [selId, setSelId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const selId = params.get('job');
+  const setSelId = (id: string) => setParams((p) => { const n = new URLSearchParams(p); n.set('job', id); return n; });
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const job = useMemo(() => jobs.find((j) => j.id === selId) ?? jobs[0] ?? null, [jobs, selId]);
@@ -97,6 +100,10 @@ export function JobsView() {
                     {alertBusy ? 'Sending…' : 'Test alert'}
                   </button>
                   {alertMsg && <span className="job-alert-msg">{alertMsg}</span>}
+                  {(() => {
+                    const o = !isRunning ? summarizeJobRun(job) : null;
+                    return o && <span className={`job-run-outcome ${o.tone}`}>{o.text}</span>;
+                  })()}
                   {!job.then && <span className="monitor-tag">monitor only</span>}
                 </div>
               </div>

@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useGroups } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
 import { TopBar } from './TopBar.tsx';
@@ -13,180 +14,240 @@ import { JobsScreen } from './JobsScreen.tsx';
 import { JobDetailScreen } from './JobDetailScreen.tsx';
 import { useJobs } from '../jobs/useJobs.ts';
 
-type View =
-  | { kind: 'books' }
-  | { kind: 'servers' }
-  | { kind: 'jobs' }
-  | { kind: 'book-detail';   bookId: string }
-  | { kind: 'running';       bookId: string }
-  | { kind: 'server-detail'; serverId: string }
-  | { kind: 'shell';         serverId: string }
-  | { kind: 'job-detail';    jobId: string };
+const TARGET_KEY = 'm.targetId';
 
-const TAB_OF: Record<View['kind'], MobileTab> = {
-  'books':         'books',
-  'book-detail':   'books',
-  'running':       'books',
-  'servers':       'servers',
-  'server-detail': 'servers',
-  'shell':         'servers',
-  'jobs':          'jobs',
-  'job-detail':    'jobs',
-};
+// What tab does this URL belong to? Drives the bottom TabBar highlight.
+function tabFromPath(pathname: string): MobileTab {
+  if (pathname.startsWith('/m/servers')) return 'servers';
+  if (pathname.startsWith('/m/jobs')) return 'jobs';
+  return 'books';
+}
 
-const ROOT_OF: Record<MobileTab, View> = {
-  'books':   { kind: 'books' },
-  'servers': { kind: 'servers' },
-  'jobs':    { kind: 'jobs' },
-};
+// Screens that need every pixel — hide the bottom tab bar.
+function fullscreenPath(pathname: string): boolean {
+  return /\/run$/.test(pathname) || /\/shell$/.test(pathname);
+}
 
 export function MobileApp() {
   const { groups, allServers } = useGroups();
   const { runbooks } = useRunbooks();
   const { jobs, run: runJobNow, runningId } = useJobs();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [stack, setStack] = useState<View[]>([{ kind: 'books' }]);
-  const [targetId, setTargetId] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  const view = stack[stack.length - 1];
-  const currentTab = TAB_OF[view.kind];
-
-  const push = useCallback((v: View) => setStack((s) => [...s, v]), []);
-  const back = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), []);
-  const switchTab = useCallback((t: MobileTab) => {
-    setStack([ROOT_OF[t]]);
+  // Sticky "which server am I going to run a runbook against?" — survives
+  // refresh via localStorage so a deep-link to /m/books/foo still has a target.
+  const [targetId, setTargetIdState] = useState<string | null>(() => {
+    try { return localStorage.getItem(TARGET_KEY); } catch { return null; }
+  });
+  const setTargetId = useCallback((id: string | null) => {
+    setTargetIdState(id);
+    try { id ? localStorage.setItem(TARGET_KEY, id) : localStorage.removeItem(TARGET_KEY); } catch {}
   }, []);
-
-  // For the book-detail screen — need to know the runbook's full content
-  const detailBookId = view.kind === 'book-detail' || view.kind === 'running' ? view.bookId : null;
-  const runbook = useRunbook(detailBookId);
-
-  // For the job-detail screen — the selected job + its check/remediate runbooks
-  const selectedJob = useMemo(
-    () => (view.kind === 'job-detail' ? jobs.find((j) => j.id === view.jobId) ?? null : null),
-    [jobs, view],
-  );
-  const jobCheck = useRunbook(selectedJob?.run ?? null);
-  const jobRemediate = useRunbook(selectedJob?.then ?? null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const target = useMemo(
     () => allServers.find((s) => s.id === targetId) ?? null,
     [allServers, targetId],
   );
 
-  const selectedServer = useMemo(() => {
-    if (view.kind === 'server-detail' || view.kind === 'shell') {
-      return allServers.find((s) => s.id === view.serverId) ?? null;
-    }
-    return null;
-  }, [allServers, view]);
-
-  const handlePickTarget = useCallback(() => {
-    setStack([{ kind: 'servers' }]);
-  }, []);
-
-  const handleServerPick = useCallback((id: string) => {
-    setReloadKey((k) => k + 1);
-    push({ kind: 'server-detail', serverId: id });
-  }, [push]);
-
-  const screen = renderScreen();
+  const currentTab = tabFromPath(location.pathname);
+  const switchTab = useCallback((t: MobileTab) => navigate(`/m/${t}`), [navigate]);
 
   return (
     <div className="m-app">
-      {renderTopBar()}
-      <div className="m-screen-body">{screen}</div>
-      {showTabBar(view) && <TabBar active={currentTab} onChange={switchTab} />}
+      <Routes>
+        <Route path="/" element={<Navigate to="/m/books" replace />} />
+        <Route path="/m" element={<Navigate to="/m/books" replace />} />
+
+        {/* BOOKS */}
+        <Route path="/m/books" element={
+          <Frame top={<TopBar signOut meta={`${allServers.length}N · ${groups.length}G · ${runbooks.length}R`} />}>
+            <BooksScreen
+              runbooks={runbooks}
+              selectedId={null}
+              onPick={(id) => navigate(`/m/books/${id}`)}
+            />
+          </Frame>
+        } />
+        <Route path="/m/books/:bookId" element={
+          <BookDetailRoute
+            target={target}
+            onPickTarget={() => navigate('/m/servers')}
+          />
+        } />
+        <Route path="/m/books/:bookId/run" element={
+          <RunningRoute target={target} />
+        } />
+
+        {/* SERVERS */}
+        <Route path="/m/servers" element={
+          <Frame top={<TopBar signOut meta={`${allServers.length}N · ${groups.length}G`} />}>
+            <ServersScreen
+              groups={groups}
+              selectedId={targetId}
+              onPick={(id) => {
+                setReloadKey((k) => k + 1);
+                const [g, s] = id.split('/');
+                navigate(`/m/servers/${g}/${s}`);
+              }}
+            />
+          </Frame>
+        } />
+        <Route path="/m/servers/:groupId/:serverId" element={
+          <ServerDetailRoute
+            allServers={allServers}
+            reloadKey={reloadKey}
+            onSelectAsTarget={(id) => { setTargetId(id); navigate('/m/books'); }}
+            onOpenShell={(g, s) => navigate(`/m/servers/${g}/${s}/shell`)}
+          />
+        } />
+        <Route path="/m/servers/:groupId/:serverId/shell" element={
+          <ShellRoute allServers={allServers} />
+        } />
+
+        {/* JOBS */}
+        <Route path="/m/jobs" element={
+          <Frame top={<TopBar signOut meta={`${jobs.length}J`} />}>
+            <JobsScreen
+              jobs={jobs}
+              selectedId={null}
+              onPick={(id) => navigate(`/m/jobs/${id}`)}
+            />
+          </Frame>
+        } />
+        <Route path="/m/jobs/:jobId" element={
+          <JobDetailRoute jobs={jobs} runningId={runningId} runJob={runJobNow} />
+        } />
+
+        <Route path="*" element={<Navigate to="/m/books" replace />} />
+      </Routes>
+
+      {!fullscreenPath(location.pathname) && <TabBar active={currentTab} onChange={switchTab} />}
     </div>
   );
+}
 
-  function renderTopBar() {
-    switch (view.kind) {
-      case 'books':
-        return <TopBar signOut meta={`${allServers.length}N · ${groups.length}G · ${runbooks.length}R`} />;
-      case 'servers':
-        return <TopBar signOut meta={`${allServers.length}N · ${groups.length}G`} />;
-      case 'jobs':
-        return <TopBar signOut meta={`${jobs.length}J`} />;
-      case 'job-detail':
-        return <TopBar onBack={back} backLabel="jobs" meta="JOB" />;
-      case 'book-detail':
-        return <TopBar onBack={back} backLabel="runbooks" meta="RUNBOOK" />;
-      case 'running':
-        return <TopBar onBack={back} backLabel="back" meta="LIVE" />;
-      case 'server-detail':
-        return <TopBar onBack={back} backLabel="servers" meta="SERVER" />;
-      case 'shell':
-        return <TopBar onBack={back} backLabel="back" meta="SHELL" />;
-    }
-  }
+function Frame({ top, children }: { top: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <>
+      {top}
+      <div className="m-screen-body">{children}</div>
+    </>
+  );
+}
 
-  function renderScreen() {
-    switch (view.kind) {
-      case 'books':
-        return <BooksScreen
-          runbooks={runbooks}
-          selectedId={null}
-          onPick={(id) => push({ kind: 'book-detail', bookId: id })}
-        />;
-      case 'servers':
-        return <ServersScreen
-          groups={groups}
-          selectedId={targetId}
-          onPick={handleServerPick}
-        />;
-      case 'jobs':
-        return <JobsScreen
-          jobs={jobs}
-          selectedId={null}
-          onPick={(id) => push({ kind: 'job-detail', jobId: id })}
-        />;
-      case 'job-detail':
-        if (!selectedJob) { back(); return null; }
-        return <JobDetailScreen
-          job={selectedJob}
-          checkRunbook={jobCheck}
-          remediateRunbook={jobRemediate}
-          running={selectedJob.state.running || runningId === selectedJob.id}
-          onRun={() => runJobNow(selectedJob.id)}
-        />;
-      case 'book-detail':
-        return <BookDetailScreen
+function BookDetailRoute({ target, onPickTarget }: { target: ReturnType<typeof useGroups>['allServers'][number] | null; onPickTarget: () => void }) {
+  const { bookId } = useParams();
+  const navigate = useNavigate();
+  const runbook = useRunbook(bookId ?? null);
+  return (
+    <>
+      <TopBar onBack={() => navigate('/m/books')} backLabel="runbooks" meta="RUNBOOK" />
+      <div className="m-screen-body">
+        <BookDetailScreen
           runbook={runbook}
           target={target}
           canRun={!!target && !!runbook}
-          onPickTarget={handlePickTarget}
-          onRun={() => push({ kind: 'running', bookId: view.bookId })}
-        />;
-      case 'running':
-        if (!target || !runbook) {
-          back();
-          return null;
-        }
-        return <RunningScreen
+          onPickTarget={onPickTarget}
+          onRun={() => navigate(`/m/books/${bookId}/run`)}
+        />
+      </div>
+    </>
+  );
+}
+
+function RunningRoute({ target }: { target: ReturnType<typeof useGroups>['allServers'][number] | null }) {
+  const { bookId } = useParams();
+  const navigate = useNavigate();
+  const runbook = useRunbook(bookId ?? null);
+  // Guard: a refresh on /run with no sticky target → bounce to detail screen
+  // (which prompts the user to pick one). Same idea for an unknown runbook.
+  useEffect(() => {
+    if (!runbook && bookId) { /* still loading */ return; }
+    if (!target) navigate(`/m/books/${bookId}`, { replace: true });
+  }, [target, runbook, bookId, navigate]);
+  if (!target || !runbook) return null;
+  return (
+    <>
+      <TopBar onBack={() => navigate(-1)} backLabel="back" meta="LIVE" />
+      <div className="m-screen-body">
+        <RunningScreen
           runbookId={runbook.id}
           runbookName={runbook.name}
           target={target}
-          onBack={back}
-        />;
-      case 'server-detail':
-        if (!selectedServer) { back(); return null; }
-        return <ServerDetailScreen
-          server={selectedServer}
-          reloadKey={reloadKey}
-          onSelectAsTarget={() => { setTargetId(selectedServer.id); switchTab('books'); }}
-          onOpenShell={() => push({ kind: 'shell', serverId: selectedServer.id })}
-        />;
-      case 'shell':
-        if (!selectedServer) { back(); return null; }
-        return <ShellScreen target={selectedServer} onBack={back} />;
-    }
-  }
+          onBack={() => navigate(-1)}
+        />
+      </div>
+    </>
+  );
 }
 
-// Hide the bottom tab bar on screens that need the full vertical space —
-// running scripts and interactive shells benefit from every pixel.
-function showTabBar(v: View): boolean {
-  return v.kind !== 'running' && v.kind !== 'shell';
+function ServerDetailRoute({ allServers, reloadKey, onSelectAsTarget, onOpenShell }: {
+  allServers: ReturnType<typeof useGroups>['allServers'];
+  reloadKey: number;
+  onSelectAsTarget: (id: string) => void;
+  onOpenShell: (g: string, s: string) => void;
+}) {
+  const { groupId, serverId } = useParams();
+  const navigate = useNavigate();
+  const id = `${groupId}/${serverId}`;
+  const server = allServers.find((s) => s.id === id) ?? null;
+  if (!server) return <Navigate to="/m/servers" replace />;
+  return (
+    <>
+      <TopBar onBack={() => navigate('/m/servers')} backLabel="servers" meta="SERVER" />
+      <div className="m-screen-body">
+        <ServerDetailScreen
+          server={server}
+          reloadKey={reloadKey}
+          onSelectAsTarget={() => onSelectAsTarget(server.id)}
+          onOpenShell={() => onOpenShell(groupId!, serverId!)}
+        />
+      </div>
+    </>
+  );
+}
+
+function ShellRoute({ allServers }: { allServers: ReturnType<typeof useGroups>['allServers'] }) {
+  const { groupId, serverId } = useParams();
+  const navigate = useNavigate();
+  const id = `${groupId}/${serverId}`;
+  const server = allServers.find((s) => s.id === id) ?? null;
+  if (!server) return <Navigate to="/m/servers" replace />;
+  return (
+    <>
+      <TopBar onBack={() => navigate(-1)} backLabel="back" meta="SHELL" />
+      <div className="m-screen-body">
+        <ShellScreen target={server} onBack={() => navigate(-1)} />
+      </div>
+    </>
+  );
+}
+
+function JobDetailRoute({ jobs, runningId, runJob }: {
+  jobs: ReturnType<typeof useJobs>['jobs'];
+  runningId: string | null;
+  runJob: (id: string) => Promise<unknown>;
+}) {
+  const { jobId } = useParams();
+  const navigate = useNavigate();
+  const job = jobs.find((j) => j.id === jobId) ?? null;
+  const jobCheck = useRunbook(job?.run ?? null);
+  const jobRemediate = useRunbook(job?.then ?? null);
+  if (!job) return <Navigate to="/m/jobs" replace />;
+  return (
+    <>
+      <TopBar onBack={() => navigate('/m/jobs')} backLabel="jobs" meta="JOB" />
+      <div className="m-screen-body">
+        <JobDetailScreen
+          job={job}
+          checkRunbook={jobCheck}
+          remediateRunbook={jobRemediate}
+          running={job.state.running || runningId === job.id}
+          onRun={() => runJob(job.id)}
+        />
+      </div>
+    </>
+  );
 }

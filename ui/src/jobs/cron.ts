@@ -66,3 +66,32 @@ export type JobUiState = 'running' | 'armed';
 export function uiState(running: boolean): JobUiState {
   return running ? 'running' : 'armed';
 }
+
+// Summarise a finished job execution for a humans-glance status pill.
+// Maps the post-run JobRunState into {tone, text}, where tone steers colour.
+export type JobRunOutcome = { tone: 'ok' | 'warn' | 'err'; text: string };
+
+export function summarizeJobRun(job: import('../shared/api.ts').Job): JobRunOutcome | null {
+  const s = job.state;
+  if (!s.lastRunAt) return null;
+  if (s.lastError) return { tone: 'err', text: `failed · ${s.lastError}` };
+  // Job with remediation: triggered=true means the check fired and `then` ran.
+  if (s.lastTriggered && s.lastAction) {
+    const code = s.lastAction.exitCode;
+    return code === 0
+      ? { tone: 'warn', text: `remediation '${job.then}' ran · exit 0` }
+      : { tone: 'err', text: `remediation '${job.then}' exit ${code ?? '?'}` };
+  }
+  // Pure monitor (no `when`): the check IS the work.
+  if (!job.when && s.lastCheck) {
+    const code = s.lastCheck.exitCode;
+    return code === 0
+      ? { tone: 'ok', text: 'passed · exit 0' }
+      : { tone: 'err', text: `failed · exit ${code ?? '?'}` };
+  }
+  // Conditional job, gate didn't trip — healthy.
+  if (s.lastCheck && !s.lastTriggered) {
+    return { tone: 'ok', text: `healthy · check exit ${s.lastCheck.exitCode ?? '?'}` };
+  }
+  return null;
+}

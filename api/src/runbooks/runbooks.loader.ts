@@ -15,28 +15,65 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Description = first contiguous block of `#` comment lines after the shebang.
- * A leading "<id><sep>" on line 1 is stripped (sep ∈ {—, :, -, –}).
+ * Description = first block of `#` comment lines after the shebang.
+ * - Leading blank lines between shebang and the block are skipped.
+ * - "Decoration" comment lines (e.g. `# -----`, `# =====`) are stripped.
+ * - Consecutive content lines are joined into a paragraph; blank `#` lines
+ *   (or blank lines between two `#` blocks) become paragraph breaks.
+ * - A leading "<id><sep>" on the first content line is stripped (sep ∈ {—, :, -, –}).
  */
 function extractDescription(id: string, contents: string): string {
   const lines = contents.split('\n');
   let i = 0;
   while (i < lines.length && lines[i].trim() === '') i++;
   if (i < lines.length && lines[i].startsWith('#!')) i++;
+  while (i < lines.length && lines[i].trim() === '') i++;
 
-  const block: string[] = [];
+  const isDecoration = (s: string) => /^[-=*_#\s]+$/.test(s);
+
+  const paragraphs: string[] = [];
+  let current: string[] = [];
+  const flush = () => {
+    if (current.length > 0) {
+      paragraphs.push(current.join(' '));
+      current = [];
+    }
+  };
+
   for (; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.trim() === '') break;
-    const m = /^\s*#\s?(.*)$/.exec(line);
+    const raw = lines[i];
+    if (raw.trim() === '') {
+      // A bare blank line: peek to see if another `#` block follows; if so,
+      // treat as a paragraph break, otherwise end of description.
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() === '') j++;
+      if (j < lines.length && /^\s*#/.test(lines[j])) {
+        flush();
+        i = j - 1;
+        continue;
+      }
+      break;
+    }
+    const m = /^\s*#\s?(.*)$/.exec(raw);
     if (!m) break;
-    block.push(m[1].trimEnd());
+    const body = m[1].trimEnd();
+    if (body === '') {
+      flush();
+      continue;
+    }
+    if (isDecoration(body)) {
+      flush();
+      continue;
+    }
+    current.push(body.trim());
   }
-  if (block.length === 0) return '';
+  flush();
+
+  if (paragraphs.length === 0) return '';
 
   const prefix = new RegExp(`^${escapeRegExp(id)}\\s*[\\u2014\\u2013:\\-]\\s+`, 'i');
-  block[0] = block[0].replace(prefix, '');
-  return block.join('\n').trim();
+  paragraphs[0] = paragraphs[0].replace(prefix, '');
+  return paragraphs.join('\n\n').trim();
 }
 
 function parseRunbook(id: string, filename: string, contents: string): Runbook {

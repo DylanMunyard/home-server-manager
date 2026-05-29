@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { testAlert, type Job, type Runbook } from '../shared/api.ts';
-import { condText, humanizeCron, uiState } from '../jobs/cron.ts';
+import { condText, humanizeCron, summarizeJobRun, uiState } from '../jobs/cron.ts';
 
 type Props = {
   job: Job;
@@ -140,6 +140,10 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
           {running ? 'RUNNING…' : 'RUN CHECK ▸'}
         </button>
       </div>
+      {(() => {
+        const o = !running ? summarizeJobRun(job) : null;
+        return o && <div className={`m-jobout ${o.tone}`}>{o.text}</div>;
+      })()}
     </>
   );
 }

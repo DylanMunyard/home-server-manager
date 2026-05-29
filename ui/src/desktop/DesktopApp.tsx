@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ServerRail } from '../servers/ServerRail.tsx';
 import { ServerDetail } from '../servers/ServerDetail.tsx';
 import { RunbookList } from '../runbooks/RunbookList.tsx';
@@ -33,12 +34,37 @@ const SHELL_STATUS_LABEL: Record<string, string> = {
 export function DesktopApp() {
   const { groups, allServers } = useGroups();
   const { runbooks } = useRunbooks();
-  const [mode, setMode] = useState<Mode>('runbook');
-  const [topView, setTopView] = useState<TopView>('console');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Top view = pathname. `/` and `/console` show the console; `/jobs` shows
+  // the jobs view. Anything else falls back to console so a bookmarked /m/...
+  // URL (mobile) doesn't render blank when the desktop layout takes over.
+  const topView: TopView = location.pathname.startsWith('/jobs') ? 'jobs' : 'console';
+
+  // Selections live in the query string so refresh + share + back-button work.
+  const serverId = searchParams.get('server');
+  const runbookId = searchParams.get('runbook');
+  const mode: Mode = (searchParams.get('mode') as Mode) === 'shell' ? 'shell' : 'runbook';
+
+  const setTopView = useCallback((v: TopView) => {
+    navigate(v === 'jobs' ? '/jobs' : { pathname: '/console', search: location.search });
+  }, [navigate, location.search]);
+
+  const updateParams = useCallback((patch: Record<string, string | null>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === null || v === '') next.delete(k);
+        else next.set(k, v);
+      }
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [alertBusy, setAlertBusy] = useState(false);
-  const [serverId, setServerId] = useState<string | null>(null);
-  const [runbookId, setRunbookId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const { detail: serverDetail, loading: detailLoading, error: detailError } = useServerDetail(serverId, reloadKey);
   const runbook = useRunbook(runbookId);
@@ -60,9 +86,9 @@ export function DesktopApp() {
     useShellStream({ onData: writeShellChunk, onClear: clearTerm });
 
   const selectServer = useCallback((id: string) => {
-    setServerId(id);
+    updateParams({ server: id });
     setReloadKey((k) => k + 1);
-  }, []);
+  }, [updateParams]);
 
   const selectedServer = useMemo(
     () => allServers.find((s) => s.id === serverId) ?? null,
@@ -73,8 +99,8 @@ export function DesktopApp() {
     if (next === mode) return;
     cancelRun();
     disconnectShell();
-    setMode(next);
-  }, [mode, cancelRun, disconnectShell]);
+    updateParams({ mode: next === 'runbook' ? null : next });
+  }, [mode, cancelRun, disconnectShell, updateParams]);
 
   const canRun = mode === 'runbook' && !!serverId && !!runbookId
     && runState !== 'connecting' && runState !== 'running';
@@ -196,7 +222,7 @@ export function DesktopApp() {
           <Terminal ref={termRef} onInput={onTerminalInput} onResize={onTerminalResize} />
         </main>
 
-        <RunbookList runbooks={runbooks} selectedId={runbookId} onSelect={setRunbookId} />
+        <RunbookList runbooks={runbooks} selectedId={runbookId} onSelect={(id) => updateParams({ runbook: id })} />
       </div>
       )}
     </div>
