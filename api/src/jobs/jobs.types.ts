@@ -30,6 +30,11 @@ export type JobConfig = {
   // secret) — stored RAW here (the ${VAR} reference, not the resolved value) so
   // GET /api/jobs never leaks secrets; resolved at execution time.
   env?: Record<string, string>;
+  // Literal values for the target runbook's declared `# params:`. Resolved
+  // against each runbook's params at run time (defaults fill in, undeclared keys
+  // are dropped). Use this for the runbook inputs a scheduled run needs; use
+  // `env` for secrets (these are plain values, surfaced by GET /api/jobs).
+  params?: Record<string, string>;
 };
 
 /** Captured outcome of running one runbook over SSH. */

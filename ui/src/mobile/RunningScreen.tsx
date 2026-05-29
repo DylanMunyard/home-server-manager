@@ -7,6 +7,7 @@ type Props = {
   runbookId: string;
   runbookName: string;
   target: ServerSummary;
+  params?: Record<string, string>;
   onBack: () => void;
 };
 
@@ -18,7 +19,7 @@ const STATUS_LABEL: Record<RunState, string> = {
   failed:     'failed',
 };
 
-export function RunningScreen({ runbookId, runbookName, target, onBack }: Props) {
+export function RunningScreen({ runbookId, runbookName, target, params, onBack }: Props) {
   const termRef = useRef<TerminalHandle>(null);
   const startedRef = useRef(false);
 
@@ -31,9 +32,9 @@ export function RunningScreen({ runbookId, runbookName, target, onBack }: Props)
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    const id = requestAnimationFrame(() => run(target.id, runbookId));
+    const id = requestAnimationFrame(() => run(target.id, runbookId, params));
     return () => cancelAnimationFrame(id);
-  }, [runbookId, target.id, run]);
+  }, [runbookId, target.id, run, params]);
 
   const isLive = state === 'connecting' || state === 'running';
   const status = state === 'done' || state === 'failed'

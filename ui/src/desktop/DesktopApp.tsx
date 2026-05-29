@@ -3,12 +3,14 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ServerRail } from '../servers/ServerRail.tsx';
 import { ServerDetail } from '../servers/ServerDetail.tsx';
 import { RunbookList } from '../runbooks/RunbookList.tsx';
+import { RunbookParams } from '../runbooks/RunbookParams.tsx';
 import { ScriptViewer } from '../runbooks/ScriptViewer.tsx';
 import { Terminal, type TerminalHandle } from '../terminal/Terminal.tsx';
 import { JobsView } from '../jobs/JobsView.tsx';
 import { testAlert } from '../shared/api.ts';
 import { useGroups, useServerDetail } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
+import { useRunbookParams } from '../runbooks/useRunbookParams.ts';
 import { useSshStream } from '../terminal/useSshStream.ts';
 import { useShellStream } from '../terminal/useShellStream.ts';
 
@@ -68,6 +70,7 @@ export function DesktopApp() {
   const [reloadKey, setReloadKey] = useState(0);
   const { detail: serverDetail, loading: detailLoading, error: detailError } = useServerDetail(serverId, reloadKey);
   const runbook = useRunbook(runbookId);
+  const { params, values: paramValues, setValue: setParamValue, complete: paramsComplete } = useRunbookParams(runbook);
   const termRef = useRef<TerminalHandle>(null);
 
   const writeRunChunk = useCallback((data: string) => {
@@ -102,7 +105,7 @@ export function DesktopApp() {
     updateParams({ mode: next === 'runbook' ? null : next });
   }, [mode, cancelRun, disconnectShell, updateParams]);
 
-  const canRun = mode === 'runbook' && !!serverId && !!runbookId
+  const canRun = mode === 'runbook' && !!serverId && !!runbookId && paramsComplete
     && runState !== 'connecting' && runState !== 'running';
   const isRunLive = runState === 'connecting' || runState === 'running';
   const runStatusLabel = (runState === 'done' || runState === 'failed') && exitCode !== null
@@ -172,11 +175,13 @@ export function DesktopApp() {
                 <ServerDetail detail={serverDetail} loading={detailLoading} error={detailError} />
               )}
 
+              <RunbookParams params={params} values={paramValues} onChange={setParamValue} />
+
               <div className="stage-actions">
                 <button
                   data-variant="run"
                   disabled={!canRun}
-                  onClick={() => { if (serverId && runbookId) run(serverId, runbookId); }}
+                  onClick={() => { if (serverId && runbookId) run(serverId, runbookId, paramValues); }}
                 >
                   Run
                 </button>

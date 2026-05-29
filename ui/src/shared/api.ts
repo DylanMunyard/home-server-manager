@@ -25,10 +25,21 @@ export type ServerDetail = ServerSummary & {
   passwordSet: boolean;
 };
 
+// A declared input; `name` is the shell var injected before the script runs.
+// `choices` present ⇒ render a <select>; `default`/first-choice prefill the UI.
+export type RunbookParam = {
+  name: string;
+  label: string;
+  required: boolean;
+  default?: string;
+  choices?: string[];
+};
+
 export type RunbookSummary = {
   id: string;
   name: string;
   description: string;
+  params: RunbookParam[];
   filename: string;
 };
 

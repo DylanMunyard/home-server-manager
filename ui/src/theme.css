@@ -130,6 +130,19 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .stage-head .target b { color: var(--ink); }
 .stage-head .desc { color: var(--ink-2); font-size: 12px; max-width: 70ch; white-space: pre-line; }
 
+/* Runbook inputs (declared via the script's `# params:` block) */
+.param-form { padding: 14px 22px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.param-form-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-3); }
+.param-row { display: grid; grid-template-columns: 160px minmax(0, 320px) 1fr; gap: 12px; align-items: center; }
+.param-k { font-size: 12px; color: var(--ink-2); }
+.param-req { color: var(--err); margin-left: 3px; }
+.param-label { font-size: 11px; color: var(--ink-3); }
+.param-form input, .param-form select {
+  font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 0; padding: 6px 9px; width: 100%;
+}
+.param-form input:focus, .param-form select:focus { outline: none; background: var(--bg-2); }
+
 .stage-actions { display: flex; gap: 10px; align-items: center; padding: 14px 22px; border-bottom: 1px solid var(--line); }
 .stage-actions .spacer { flex: 1; }
 .stage-actions .status { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); }
@@ -452,6 +465,20 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 }
 .m-prop-k { color: var(--m-ink-3); text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; }
 .m-prop-v { color: var(--m-ink); word-break: break-all; }
+
+/* Runbook inputs (from the script's `# params:` block) */
+.m-param {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px 18px; border-bottom: 1px solid var(--m-line-soft);
+  background: var(--m-paper);
+}
+.m-param-k { color: var(--m-ink-3); text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; }
+.m-param-req { color: var(--m-err); margin-left: 3px; }
+.m-param-in {
+  font: inherit; color: var(--m-ink); background: var(--m-paper-2);
+  border: 1px solid var(--m-line); border-radius: 0; padding: 10px 12px; width: 100%;
+}
+.m-param-in:focus { outline: none; border-color: var(--m-ink); }
 
 /* Run status banner */
 .m-runstatus {

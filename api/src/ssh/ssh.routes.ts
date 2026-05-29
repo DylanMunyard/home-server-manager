@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
 import { loadServer } from '../servers/servers.loader.js';
-import { loadRunbook } from '../runbooks/runbooks.loader.js';
+import { loadRunbook, resolveParamValues } from '../runbooks/runbooks.loader.js';
 import { runScript, type RunEvent } from './ssh.session.js';
+import { exportPrelude } from './prelude.js';
 import { openShell, type ShellEvent } from './ssh.shell.js';
 
-type RunQuery = { server?: string; runbook?: string };
+type RunQuery = { server?: string; runbook?: string; params?: string };
 type ShellQuery = { server?: string; cols?: string; rows?: string };
 
 type ClientShellMsg =
@@ -15,7 +16,7 @@ type ClientShellMsg =
 export async function sshRoutes(app: FastifyInstance) {
   app.get<{ Querystring: RunQuery }>('/ws/run', { websocket: true }, async (socket, req) => {
     const ws = socket as unknown as WebSocket;
-    const { server: serverId, runbook: runbookId } = req.query;
+    const { server: serverId, runbook: runbookId, params: paramsRaw } = req.query;
 
     const send = (e: RunEvent) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(e));
@@ -31,7 +32,16 @@ export async function sshRoutes(app: FastifyInstance) {
     if (!server)  { send({ type: 'error', message: `unknown server: ${serverId}` });   ws.close(); return; }
     if (!runbook) { send({ type: 'error', message: `unknown runbook: ${runbookId}` }); ws.close(); return; }
 
-    const handle = runScript(server, runbook.contents, send);
+    // Param values arrive as a JSON object in the query string. Resolve them
+    // against the runbook's declared params (unknown keys ignored) and inject
+    // as an `export` prelude — same mechanism as a job's `env:`.
+    let provided: Record<string, string> = {};
+    if (paramsRaw) {
+      try { provided = JSON.parse(paramsRaw) as Record<string, string>; } catch { /* ignore */ }
+    }
+    const prelude = exportPrelude(resolveParamValues(runbook.params, provided));
+
+    const handle = runScript(server, prelude + runbook.contents, send);
     ws.on('close', () => handle.cancel());
     await handle.done;
     ws.close();

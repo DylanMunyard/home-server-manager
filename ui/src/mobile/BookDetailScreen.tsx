@@ -1,18 +1,22 @@
 import { useState } from 'react';
-import { testAlert, type Runbook, type ServerSummary } from '../shared/api.ts';
+import { testAlert, type Runbook, type RunbookParam, type ServerSummary } from '../shared/api.ts';
 
 type Tab = 'script' | 'props';
 
 type Props = {
   runbook: Runbook | null;
   target: ServerSummary | null;
+  params: RunbookParam[];
+  values: Record<string, string>;
+  onParamChange: (name: string, value: string) => void;
   onPickTarget: () => void;
   onRun: () => void;
   canRun: boolean;
 };
 
-export function BookDetailScreen({ runbook, target, onPickTarget, onRun, canRun }: Props) {
-  const [tab, setTab] = useState<Tab>('script');
+export function BookDetailScreen({ runbook, target, params, values, onParamChange, onPickTarget, onRun, canRun }: Props) {
+  // Land on the props tab when there are inputs to fill — that's the gate to Run.
+  const [tab, setTab] = useState<Tab>(params.length > 0 ? 'props' : 'script');
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   if (!runbook) return <div className="m-empty">loading…</div>;
@@ -46,7 +50,7 @@ export function BookDetailScreen({ runbook, target, onPickTarget, onRun, canRun 
       <div className="m-content">
         {tab === 'script'
           ? <ScriptView contents={runbook.contents} />
-          : <PropsView runbook={runbook} target={target} />}
+          : <PropsView runbook={runbook} target={target} params={params} values={values} onParamChange={onParamChange} />}
       </div>
 
       <div className="m-actionbar two">
@@ -87,9 +91,29 @@ function ScriptView({ contents }: { contents: string }) {
   );
 }
 
-function PropsView({ runbook, target }: { runbook: Runbook; target: ServerSummary | null }) {
+function PropsView({ runbook, target, params, values, onParamChange }: {
+  runbook: Runbook;
+  target: ServerSummary | null;
+  params: RunbookParam[];
+  values: Record<string, string>;
+  onParamChange: (name: string, value: string) => void;
+}) {
   return (
     <div>
+      {params.map((p) => (
+        <div className="m-param" key={p.name}>
+          <label className="m-param-k" htmlFor={`p-${p.name}`}>
+            {p.name}{p.required && <span className="m-param-req">*</span>}
+          </label>
+          {p.choices ? (
+            <select id={`p-${p.name}`} className="m-param-in" value={values[p.name] ?? ''} onChange={(e) => onParamChange(p.name, e.target.value)}>
+              {p.choices.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          ) : (
+            <input id={`p-${p.name}`} className="m-param-in" type="text" value={values[p.name] ?? ''} placeholder={p.label} onChange={(e) => onParamChange(p.name, e.target.value)} />
+          )}
+        </div>
+      ))}
       <div className="m-prop"><span className="m-prop-k">file</span><span className="m-prop-v">config/scripts/{runbook.filename}</span></div>
       <div className="m-prop"><span className="m-prop-k">target</span><span className="m-prop-v">{target ? `${target.user}@${target.host}` : '—'}</span></div>
       <div className="m-prop"><span className="m-prop-k">auth</span><span className="m-prop-v">{target ? target.authType : '—'}</span></div>

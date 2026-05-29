@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useGroups } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
+import { useRunbookParams } from '../runbooks/useRunbookParams.ts';
 import { TopBar } from './TopBar.tsx';
 import { TabBar, type MobileTab } from './TabBar.tsx';
 import { BooksScreen } from './BooksScreen.tsx';
@@ -141,6 +142,7 @@ function BookDetailRoute({ target, onPickTarget }: { target: ReturnType<typeof u
   const { bookId } = useParams();
   const navigate = useNavigate();
   const runbook = useRunbook(bookId ?? null);
+  const { params, values, setValue, complete } = useRunbookParams(runbook);
   return (
     <>
       <TopBar onBack={() => navigate('/m/books')} backLabel="runbooks" meta="RUNBOOK" />
@@ -148,9 +150,14 @@ function BookDetailRoute({ target, onPickTarget }: { target: ReturnType<typeof u
         <BookDetailScreen
           runbook={runbook}
           target={target}
-          canRun={!!target && !!runbook}
+          params={params}
+          values={values}
+          onParamChange={setValue}
+          canRun={!!target && !!runbook && complete}
           onPickTarget={onPickTarget}
-          onRun={() => navigate(`/m/books/${bookId}/run`)}
+          // Carry the filled values to the run screen via router state (no global
+          // store). A refresh on /run loses them and falls back to declared defaults.
+          onRun={() => navigate(`/m/books/${bookId}/run`, { state: { params: values } })}
         />
       </div>
     </>
@@ -160,7 +167,9 @@ function BookDetailRoute({ target, onPickTarget }: { target: ReturnType<typeof u
 function RunningRoute({ target }: { target: ReturnType<typeof useGroups>['allServers'][number] | null }) {
   const { bookId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const runbook = useRunbook(bookId ?? null);
+  const params = (location.state as { params?: Record<string, string> } | null)?.params;
   // Guard: a refresh on /run with no sticky target → bounce to detail screen
   // (which prompts the user to pick one). Same idea for an unknown runbook.
   useEffect(() => {
@@ -176,6 +185,7 @@ function RunningRoute({ target }: { target: ReturnType<typeof useGroups>['allSer
           runbookId={runbook.id}
           runbookName={runbook.name}
           target={target}
+          params={params}
           onBack={() => navigate(-1)}
         />
       </div>

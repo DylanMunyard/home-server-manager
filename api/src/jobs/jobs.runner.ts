@@ -2,6 +2,7 @@ import { expandEnv } from '../config.js';
 import { loadServer } from '../servers/servers.loader.js';
 import { loadRunbook } from '../runbooks/runbooks.loader.js';
 import { runScript } from '../ssh/ssh.session.js';
+import { exportPrelude } from '../ssh/prelude.js';
 import type { ServerConfig } from '../servers/servers.types.js';
 import { sendAlert } from '../alerts/ntfy.js';
 import type { JobConfig, JobRunState, RunResult, Trigger } from './jobs.types.js';
@@ -23,10 +24,6 @@ export function allStates(): Record<string, JobRunState> {
   return Object.fromEntries(state);
 }
 
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
 /**
  * `export NAME=value` lines for the job's env, resolved from process env via
  * ${VAR}. Prepended to a runbook so the remote `bash -s` sees them as real
@@ -34,9 +31,10 @@ function shellQuote(s: string): string {
  */
 function envPrelude(env: Record<string, string> | undefined): string {
   if (!env) return '';
-  return Object.entries(env)
-    .map(([k, v]) => `export ${k}=${shellQuote(expandEnv(v))}`)
-    .join('\n') + '\n';
+  const resolved = Object.fromEntries(
+    Object.entries(env).map(([k, v]) => [k, expandEnv(v)]),
+  );
+  return exportPrelude(resolved);
 }
 
 /** Run one runbook over SSH, buffering output into a single RunResult. */

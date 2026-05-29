@@ -26,14 +26,17 @@ export function useSshStream({ onChunk, onClear }: StreamHandlers) {
 
   useEffect(() => () => cancel(), [cancel]);
 
-  const run = useCallback((serverId: string, runbookId: string) => {
+  const run = useCallback((serverId: string, runbookId: string, params?: Record<string, string>) => {
     cancel();
     onClear?.();
     setExitCode(null);
     setState('connecting');
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${window.location.host}/ws/run?server=${encodeURIComponent(serverId)}&runbook=${encodeURIComponent(runbookId)}`;
+    const paramsQuery = params && Object.keys(params).length > 0
+      ? `&params=${encodeURIComponent(JSON.stringify(params))}`
+      : '';
+    const url = `${proto}://${window.location.host}/ws/run?server=${encodeURIComponent(serverId)}&runbook=${encodeURIComponent(runbookId)}${paramsQuery}`;
     const ws = new WebSocket(url);
     wsRef.current = ws;
 

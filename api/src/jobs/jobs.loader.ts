@@ -17,6 +17,7 @@ type RawJob = {
   then?: string;
   notify?: { on?: unknown; priority?: unknown };
   env?: unknown;
+  params?: unknown;
 };
 
 const NOTIFY_EVENTS: NotifyEvent[] = ['action', 'error'];
