@@ -34,6 +34,34 @@ export type RunbookSummary = {
 
 export type Runbook = RunbookSummary & { contents: string };
 
+// ── Recurring jobs ──────────────────────────────────────────────
+export type JobTrigger = { exit?: 'nonzero' | 'zero' | number; stdoutContains?: string };
+export type JobNotify = { on: ('action' | 'error')[]; priority?: string };
+
+// Mirrors the API's in-memory JobRunState. No history — single last-run snapshot.
+export type JobRunState = {
+  running: boolean;
+  lastRunAt?: string;
+  lastDurationMs?: number;
+  lastTriggered?: boolean;
+  lastError?: string;
+};
+
+export type Job = {
+  id: string;
+  name: string;
+  description?: string;
+  schedule: string;        // raw 5-field cron
+  target: string;          // "<group>/<server>"
+  run: string;             // check runbook id
+  when?: JobTrigger;
+  then?: string;           // remediation runbook id
+  notify?: JobNotify;
+  env?: Record<string, string>;
+  nextRunAt: string | null;
+  state: JobRunState;
+};
+
 // Wraps fetch so an expired/absent session (401) bounces to the OAuth start
 // route instead of surfacing as a generic load error. Same-origin requests
 // send the session cookie automatically.
@@ -71,5 +99,27 @@ export async function fetchRunbooks(): Promise<RunbookSummary[]> {
 
 export async function fetchRunbook(id: string): Promise<Runbook> {
   const r = await apiGet(`/api/runbooks/${encodeURIComponent(id)}`, 'failed to load runbook');
+  return r.json();
+}
+
+// Same 401 bounce as apiGet, for the run-now action.
+async function apiPost(path: string, errorMsg: string): Promise<Response> {
+  const r = await fetch(path, { method: 'POST' });
+  if (r.status === 401) {
+    window.location.href = '/api/auth/login';
+    return new Promise<Response>(() => {});
+  }
+  if (!r.ok) throw new Error(errorMsg);
+  return r;
+}
+
+export async function fetchJobs(): Promise<Job[]> {
+  const r = await apiGet('/api/jobs', 'failed to load jobs');
+  return r.json();
+}
+
+// Triggers a job off-schedule; resolves with the updated job (incl. fresh state).
+export async function runJob(id: string): Promise<Job> {
+  const r = await apiPost(`/api/jobs/${encodeURIComponent(id)}/run`, 'failed to run job');
   return r.json();
 }

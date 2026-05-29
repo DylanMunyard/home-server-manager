@@ -9,14 +9,19 @@ import { RunningScreen } from './RunningScreen.tsx';
 import { ServersScreen } from './ServersScreen.tsx';
 import { ServerDetailScreen } from './ServerDetailScreen.tsx';
 import { ShellScreen } from './ShellScreen.tsx';
+import { JobsScreen } from './JobsScreen.tsx';
+import { JobDetailScreen } from './JobDetailScreen.tsx';
+import { useJobs } from '../jobs/useJobs.ts';
 
 type View =
   | { kind: 'books' }
   | { kind: 'servers' }
+  | { kind: 'jobs' }
   | { kind: 'book-detail';   bookId: string }
   | { kind: 'running';       bookId: string }
   | { kind: 'server-detail'; serverId: string }
-  | { kind: 'shell';         serverId: string };
+  | { kind: 'shell';         serverId: string }
+  | { kind: 'job-detail';    jobId: string };
 
 const TAB_OF: Record<View['kind'], MobileTab> = {
   'books':         'books',
@@ -25,11 +30,20 @@ const TAB_OF: Record<View['kind'], MobileTab> = {
   'servers':       'servers',
   'server-detail': 'servers',
   'shell':         'servers',
+  'jobs':          'jobs',
+  'job-detail':    'jobs',
+};
+
+const ROOT_OF: Record<MobileTab, View> = {
+  'books':   { kind: 'books' },
+  'servers': { kind: 'servers' },
+  'jobs':    { kind: 'jobs' },
 };
 
 export function MobileApp() {
   const { groups, allServers } = useGroups();
   const { runbooks } = useRunbooks();
+  const { jobs, run: runJobNow, runningId } = useJobs();
 
   const [stack, setStack] = useState<View[]>([{ kind: 'books' }]);
   const [targetId, setTargetId] = useState<string | null>(null);
@@ -41,12 +55,20 @@ export function MobileApp() {
   const push = useCallback((v: View) => setStack((s) => [...s, v]), []);
   const back = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), []);
   const switchTab = useCallback((t: MobileTab) => {
-    setStack([{ kind: t === 'books' ? 'books' : 'servers' }]);
+    setStack([ROOT_OF[t]]);
   }, []);
 
   // For the book-detail screen — need to know the runbook's full content
   const detailBookId = view.kind === 'book-detail' || view.kind === 'running' ? view.bookId : null;
   const runbook = useRunbook(detailBookId);
+
+  // For the job-detail screen — the selected job + its check/remediate runbooks
+  const selectedJob = useMemo(
+    () => (view.kind === 'job-detail' ? jobs.find((j) => j.id === view.jobId) ?? null : null),
+    [jobs, view],
+  );
+  const jobCheck = useRunbook(selectedJob?.run ?? null);
+  const jobRemediate = useRunbook(selectedJob?.then ?? null);
 
   const target = useMemo(
     () => allServers.find((s) => s.id === targetId) ?? null,
@@ -85,6 +107,10 @@ export function MobileApp() {
         return <TopBar signOut meta={`${allServers.length}N · ${groups.length}G · ${runbooks.length}R`} />;
       case 'servers':
         return <TopBar signOut meta={`${allServers.length}N · ${groups.length}G`} />;
+      case 'jobs':
+        return <TopBar signOut meta={`${jobs.length}J`} />;
+      case 'job-detail':
+        return <TopBar onBack={back} backLabel="jobs" meta="JOB" />;
       case 'book-detail':
         return <TopBar onBack={back} backLabel="runbooks" meta="RUNBOOK" />;
       case 'running':
@@ -109,6 +135,21 @@ export function MobileApp() {
           groups={groups}
           selectedId={targetId}
           onPick={handleServerPick}
+        />;
+      case 'jobs':
+        return <JobsScreen
+          jobs={jobs}
+          selectedId={null}
+          onPick={(id) => push({ kind: 'job-detail', jobId: id })}
+        />;
+      case 'job-detail':
+        if (!selectedJob) { back(); return null; }
+        return <JobDetailScreen
+          job={selectedJob}
+          checkRunbook={jobCheck}
+          remediateRunbook={jobRemediate}
+          running={selectedJob.state.running || runningId === selectedJob.id}
+          onRun={() => runJobNow(selectedJob.id)}
         />;
       case 'book-detail':
         return <BookDetailScreen

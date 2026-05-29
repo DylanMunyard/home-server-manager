@@ -59,6 +59,9 @@ spec:
             - name: scripts-config
               mountPath: /config/scripts
               readOnly: true
+            - name: jobs-config
+              mountPath: /config/jobs
+              readOnly: true
             - name: ssh-keys
               mountPath: /home/app/.ssh
               readOnly: true
@@ -83,6 +86,9 @@ spec:
           configMap:
             name: home-server-mgr-scripts
             defaultMode: 0755
+        - name: jobs-config
+          configMap:
+            name: home-server-mgr-jobs
         - name: ssh-keys
           secret:
             secretName: home-server-mgr-ssh

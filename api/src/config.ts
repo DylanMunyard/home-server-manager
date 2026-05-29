@@ -9,6 +9,7 @@ export const paths = {
   configRoot: resolve(here, '../../config'),
   servers:    resolve(here, '../../config/servers'),
   scripts:    resolve(here, '../../config/scripts'),
+  jobs:       resolve(here, '../../config/jobs'),
   envFile:    resolve(here, '../../.env'),
 };
 

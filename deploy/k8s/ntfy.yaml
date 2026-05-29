@@ -1,0 +1,127 @@
+# Self-hosted ntfy — private push alerts for recurring jobs.
+#
+# Why self-hosted: job alerts carry raw script output (IPs, hostnames, paths),
+# so we keep them off ntfy.sh. The API posts to ntfy over the in-cluster
+# Service (payloads never leave the cluster on the send path); the phone pulls
+# over the Cloudflare Tunnel (ntfy.munyard.dev). NOTE: Cloudflare terminates
+# TLS at its edge, so it can see alert contents on the phone-delivery path —
+# same trust boundary as the rest of this app. For zero third parties, expose
+# ntfy via Tailscale instead of the tunnel route in cloudflared.yaml.
+#
+# Stateful (the project's first PVC): auth.db holds the token/ACLs, cache.db
+# queues messages while the phone is offline. Both must survive restarts.
+#
+# ── One-time setup ───────────────────────────────────────────────────────────
+#   kubectl apply -f deploy/k8s/ntfy.yaml
+#   cloudflared tunnel route dns home-server-mgr ntfy.munyard.dev
+#   # wait for the pod, then create a locked-down user + token for the API/phone:
+#   kubectl -n home-server-mgr exec -it deploy/ntfy -- ntfy user add hsm        # set a password
+#   kubectl -n home-server-mgr exec    deploy/ntfy -- ntfy access hsm hsm-alerts rw
+#   kubectl -n home-server-mgr exec -it deploy/ntfy -- ntfy token add hsm       # prints tk_… → Secret
+#   # add to the home-server-mgr-secrets Secret (envFrom already wires them):
+#   #   NTFY_URL=http://ntfy.home-server-mgr.svc.cluster.local
+#   #   NTFY_TOPIC=hsm-alerts
+#   #   NTFY_TOKEN=tk_xxxxxxxxxxxx
+#   # phone: subscribe to https://ntfy.munyard.dev/hsm-alerts, log in as hsm
+#   #        (or paste the token) — anonymous access is denied by default.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy-config
+  namespace: home-server-mgr
+data:
+  server.yml: |
+    base-url: "https://ntfy.munyard.dev"
+    listen-http: ":80"
+    cache-file: "/var/lib/ntfy/cache.db"
+    cache-duration: "12h"
+    auth-file: "/var/lib/ntfy/auth.db"
+    # Locked down: nobody reads or writes without an explicit grant (the `hsm`
+    # user created in setup). Keeps the topic private even though it's exposed.
+    auth-default-access: "deny-all"
+    # Sits behind the Cloudflare Tunnel.
+    behind-proxy: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ntfy-data
+  namespace: home-server-mgr
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+  # k3s's bundled Rancher local-path provisioner (the cluster default).
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ntfy
+  namespace: home-server-mgr
+spec:
+  replicas: 1
+  # RWO volume + sqlite: never run two writers. Recreate avoids a second pod
+  # briefly mounting the PVC during a rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ntfy
+  template:
+    metadata:
+      labels:
+        app: ntfy
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: ntfy
+          image: binwiederhier/ntfy:latest
+          args: ["serve"]
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ntfy
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/ntfy
+      volumes:
+        - name: config
+          configMap:
+            name: ntfy-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: ntfy-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ntfy
+  namespace: home-server-mgr
+  labels:
+    app: ntfy
+spec:
+  selector:
+    app: ntfy
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

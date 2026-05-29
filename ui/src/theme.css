@@ -181,6 +181,92 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .empty { padding: 22px; color: var(--ink-3); font-size: 12px; }
 
 /* ─────────────────────────────────────────────────────────────
+ *  JOBS (desktop) — top-level console↔jobs switch + jobs view
+ * ───────────────────────────────────────────────────────────── */
+
+/* top-level nav in the masthead */
+.masthead h1 { margin: 0; }
+.top-nav { display: flex; margin-right: auto; margin-left: 6px; }
+.top-nav button {
+  border: 1px solid var(--line); border-left: none;
+  padding: 6px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em;
+  color: var(--ink-3); background: transparent; border-radius: 0;
+}
+.top-nav button:first-child { border-left: 1px solid var(--line); }
+.top-nav button:hover { background: var(--bg-2); color: var(--ink); }
+.top-nav button[data-active="true"] { background: var(--ink); color: var(--bg); }
+
+.jobs-view { display: grid; grid-template-columns: 300px 1fr; height: 100%; min-height: 0; }
+.jobs-rail { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.jobs-detail { overflow: auto; min-height: 0; }
+
+/* job list rows (extends .list-row) */
+.job-row { align-items: start; }
+.job-row .dot { width: 11px; height: 11px; margin-top: 4px; }
+.job-row .dot.running { background: var(--ok); border-radius: 50%; animation: job-pulse 1.2s infinite; }
+.job-row .dot.armed { background: var(--ink); }
+.job-row-right { display: grid; gap: 4px; justify-items: end; }
+.job-row-right .cad { font-size: 11px; color: var(--ink-2); }
+.job-row-right .tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); }
+.job-row-right .tag.running { color: var(--ok); }
+@keyframes job-pulse { 50% { opacity: 0.35; } }
+
+/* job detail header */
+.job-head { padding: 18px 22px; border-bottom: 1px solid var(--line); }
+.job-head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.job-head .meta { font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-3); }
+.job-head h2 { margin: 4px 0 0; font-size: 24px; font-weight: 700; letter-spacing: 0.01em; }
+.job-head .desc { color: var(--ink-2); font-size: 12px; max-width: 70ch; margin-top: 6px; }
+.job-head-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.monitor-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; background: var(--ink-2); color: var(--bg); padding: 3px 8px; }
+
+.job-meta { display: flex; flex-wrap: wrap; gap: 28px; margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.job-meta-cell dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }
+.job-meta-cell dd { margin: 6px 0 0; font-size: 14px; }
+.job-meta-cell dd.big { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.job-meta-cell dd.raw { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+.job-meta-cell dd.mono .dim { color: var(--ink-3); }
+.job-meta-cell dd.err { color: var(--err); font-size: 12px; max-width: 60ch; }
+.job-meta-cell dd.state { display: flex; align-items: center; gap: 8px; }
+.job-meta-cell dd.state .dot { width: 9px; height: 9px; }
+.job-meta-cell dd.state.running { color: var(--ok); }
+.job-meta-cell dd.state.running .dot { background: var(--ok); border-radius: 50%; }
+.job-meta-cell dd.state.armed .dot { background: var(--ink); }
+
+/* the vertical flow: check → gate → remediate → notify */
+.flow { padding: 18px 22px 8px; }
+.flow-step { display: grid; grid-template-columns: 26px 1fr; gap: 16px; }
+.flow-rail { display: flex; flex-direction: column; align-items: center; }
+.flow-node { width: 26px; height: 26px; flex: 0 0 26px; border: 1.5px solid var(--ink); background: var(--bg); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.flow-node.gate { transform: rotate(45deg); border-color: var(--err); color: var(--err); }
+.flow-node.gate span { transform: rotate(-45deg); }
+.flow-node.warn { border-color: var(--err); color: var(--err); }
+.flow-line { flex: 1; width: 0; border-left: 2px dotted var(--line); margin: 5px 0; min-height: 18px; }
+.flow-body { padding-bottom: 22px; min-width: 0; }
+.flow-body.last { padding-bottom: 8px; }
+.flow-kind { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-3); }
+.flow-kind.ok { color: var(--ok); }
+.flow-kind.err { color: var(--err); }
+.flow-book { margin-top: 6px; }
+.flow-book-head { display: flex; align-items: center; gap: 12px; }
+.flow-book-name { font-size: 16px; font-weight: 700; }
+.flow-book-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); border: 1px solid var(--line-soft); padding: 2px 6px; }
+.flow-book-desc { font-size: 12px; color: var(--ink-2); margin-top: 5px; max-width: 60ch; }
+.flow-book .script { margin-top: 8px; border: 1px solid var(--line); max-height: 220px; }
+.flow-book-missing { margin-top: 8px; color: var(--ink-3); font-style: italic; }
+.flow-meta { font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+.flow-meta b { color: var(--ink-2); }
+.flow-cond { display: inline-block; margin-top: 7px; background: var(--accent); border: 1.5px solid var(--ink); padding: 6px 12px; font-size: 14px; font-weight: 700; }
+.flow-branch { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
+.flow-branch.t { color: var(--ink-2); }
+.flow-branch .y { color: var(--ok); font-weight: 700; }
+.flow-branch .n { color: var(--err); font-weight: 700; }
+.flow-notify { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.flow-notify .nf { font-size: 11px; padding: 4px 9px; border: 1px dashed var(--line-soft); color: var(--ink-2); }
+.flow-notify .nf.err { border-color: rgba(168, 51, 31, 0.5); color: var(--err); }
+.flow-notify .nf.pri { border-style: solid; border-color: var(--line); background: var(--bg-2); }
+
+/* ─────────────────────────────────────────────────────────────
  *  MOBILE — single-column shell with bottom tab nav
  *  Tokens scoped to .m-app so desktop look is unaffected.
  * ───────────────────────────────────────────────────────────── */
@@ -196,6 +282,8 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
   --m-hl:        #f3d56b;
   --m-term-bg:   #0a0907;
   --m-term-fg:   #d9cdb0;
+  --m-ok:        #4a6a2a;
+  --m-err:       #a8331f;
 
   background: var(--m-paper);
   color: var(--m-ink);
@@ -415,3 +503,54 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 /* When the terminal mounts in a mobile screen, make it fill the remaining space
  * up to the action bar (the mobile flex column drives this for us). */
 .m-app .terminal-wrap { background: var(--m-term-bg); padding: 8px 12px; }
+
+/* ── Mobile jobs ─────────────────────────────────────────────── */
+.m-tabbar.three { grid-template-columns: repeat(3, 1fr); }
+
+/* jobs list row */
+.m-row.m-job { align-items: flex-start; }
+.m-jind { width: 12px; height: 12px; margin-top: 3px; }
+.m-jind.running { background: var(--m-ok); border-radius: 50%; animation: m-pulse 1.2s infinite; }
+.m-jind.armed { background: var(--m-ink); }
+.m-row-sub.chain { color: var(--m-ink-3); }
+.m-jrow-state { display: grid; gap: 4px; justify-items: end; }
+.m-jrow-state .cad { font-size: 12px; color: var(--m-ink-2); }
+.m-jrow-state .tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--m-ink-3); }
+.m-jrow-state .tag.running { color: var(--m-ok); }
+
+/* job detail schedule grid */
+.m-jsched { display: flex; gap: 26px; flex-wrap: wrap; padding: 12px 18px; border-bottom: 1px solid var(--m-line); background: var(--m-paper); }
+.m-jsched .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--m-ink-3); }
+.m-jsched .big { font-size: 17px; font-weight: 700; color: var(--m-ink); margin-top: 4px; }
+.m-jsched .raw { font-size: 11px; color: var(--m-ink-3); margin-top: 2px; }
+
+/* the flow */
+.m-jflow { padding: 16px 18px 4px; }
+.m-jstep { display: grid; grid-template-columns: 26px 1fr; gap: 14px; }
+.m-jrail { display: flex; flex-direction: column; align-items: center; }
+.m-jnode { width: 24px; height: 24px; flex: 0 0 24px; border: 1.5px solid var(--m-ink); background: var(--m-paper); display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--m-ink); }
+.m-jnode.dia { transform: rotate(45deg); border-color: var(--m-err); }
+.m-jnode.dia span { transform: rotate(-45deg); color: var(--m-err); }
+.m-jnode.warn { border-color: var(--m-err); color: var(--m-err); }
+.m-jline { flex: 1; width: 0; border-left: 2px dotted var(--m-line); margin: 5px 0; min-height: 16px; }
+.m-jbody { padding-bottom: 22px; min-width: 0; }
+.m-jbody.last { padding-bottom: 6px; }
+.m-jkind { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--m-ink-3); }
+.m-jkind.ok { color: var(--m-ok); }
+.m-jkind.err { color: var(--m-err); }
+.m-jbk { font-size: 16px; font-weight: 700; color: var(--m-ink); margin-top: 4px; }
+.m-jbd { font-size: 11.5px; color: var(--m-ink-3); margin-top: 4px; line-height: 1.45; }
+.m-jpeek { margin-top: 9px; background: var(--m-term-bg); color: var(--m-term-fg); padding: 8px 11px; font-size: 10.5px; line-height: 1.5; overflow-x: auto; }
+.m-jpeek .ln { white-space: pre; }
+.m-jpeek .ln.com { color: var(--m-ink-4); font-style: italic; }
+.m-jmeta { font-size: 10.5px; color: var(--m-ink-3); margin-top: 8px; word-break: break-all; }
+.m-jmeta b { color: var(--m-ink-2); }
+.m-jcond { display: inline-block; margin-top: 7px; background: var(--m-hl); border: 1.5px solid var(--m-ink); padding: 6px 11px; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+.m-jbranch { font-size: 11.5px; color: var(--m-ink-3); margin-top: 8px; }
+.m-jbranch.t { color: var(--m-ink-2); }
+.m-jbranch .y { color: var(--m-ok); font-weight: 700; }
+.m-jbranch .n { color: var(--m-err); font-weight: 700; }
+.m-jntfy { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.m-jntfy .nf { font-size: 10.5px; padding: 4px 8px; border: 1px dashed var(--m-line); color: var(--m-ink-2); }
+.m-jntfy .nf.err { border-color: rgba(168, 51, 31, 0.6); color: var(--m-err); }
+.m-jntfy .nf.pri { border-style: solid; border-color: var(--m-line); background: var(--m-paper-2); }

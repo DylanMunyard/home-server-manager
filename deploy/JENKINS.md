@@ -135,6 +135,17 @@ matches the hostname (`https://mgr.munyard.dev`), and that
 `mgr.munyard.dev/api/auth/callback` is registered as an OAuth2 redirect URL in
 the Discord app.
 
+### 2c. Self-hosted ntfy (private job alerts) — optional
+
+`deploy/k8s/ntfy.yaml` runs a private ntfy server for recurring-job push
+alerts (the alternative to public ntfy.sh — keeps raw script output off a third
+party). It's **applied manually** too (CI doesn't touch it), and it's the only
+stateful piece (a 1Gi PVC for its auth + message DBs). Full one-time setup —
+apply, add the tunnel DNS route, create a locked-down user/token, and set
+`NTFY_URL`/`NTFY_TOPIC`/`NTFY_TOKEN` in the Secret — is documented in the header
+comment of `deploy/k8s/ntfy.yaml`. The cloudflared ingress route for
+`ntfy.munyard.dev` is already in `cloudflared.yaml`.
+
 ---
 
 ## 3. Configure Docker Hub credentials in Jenkins
@@ -197,7 +208,7 @@ mounts.
 | Secret | Keys | Used by |
 |--------|------|---------|
 | `home-server-mgr-ssh` | `id_ed25519` (and any other private keys referenced from YAML) | Mounted at `/home/app/.ssh/` |
-| `home-server-mgr-secrets` | One key per `${VAR}` in `config/servers/*.yaml` (e.g. `HETZNER_HOST`, `HETZNER_PASSPHRASE`) **plus** the auth keys `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`, `SESSION_SECRET`, `SESSION_SALT`. | `envFrom: secretRef` on the API pod |
+| `home-server-mgr-secrets` | One key per `${VAR}` in `config/servers/*.yaml` (e.g. `HETZNER_HOST`, `HETZNER_PASSPHRASE`) **plus** the auth keys `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`, `SESSION_SECRET`, `SESSION_SALT`, **plus** (optional) the self-hosted ntfy alert keys `NTFY_URL` (in-cluster: `http://ntfy.home-server-mgr.svc.cluster.local`), `NTFY_TOPIC`, `NTFY_TOKEN`. | `envFrom: secretRef` on the API pod |
 | `tunnel-credentials` | `credentials.json` (Cloudflare Tunnel creds) | Mounted at `/etc/cloudflared/creds` on the cloudflared pod |
 
 ---
@@ -211,6 +222,7 @@ folder — do **not** create them manually.
 |-----------|--------------|------------|
 | `home-server-mgr-servers` | `config/servers/` (every file) | `/app/config/servers` |
 | `home-server-mgr-scripts` | `config/scripts/` (every file, mode 0755) | `/app/config/scripts` |
+| `home-server-mgr-jobs` | `config/jobs/` (every file) | `/app/config/jobs` |
 
 The `--from-file=<dir>` form means adding or removing files in those
 folders is picked up on the next Jenkins build — no Jenkinsfile change

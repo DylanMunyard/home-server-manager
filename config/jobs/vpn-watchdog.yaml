@@ -1,0 +1,20 @@
+name: VPN watchdog
+description: Reconnect PIA when the box loses its VPN or internet
+schedule: "*/5 * * * *"          # every 5 minutes, in the API process's timezone
+target: bethany/linux-isos        # global server id (<group>/<server>)
+
+run: vpn-check                   # the check: exits nonzero when off-VPN / no internet
+
+when:
+  exit: nonzero                  # nonzero check exit means "remediate"
+
+then: pia-vpn-reset              # remediation: regen wireguard + restart tunnel
+
+notify:
+  on: [action, error]            # action = reset ran; error = the reset failed
+  priority: high
+
+# vpn-check detects off-VPN by egress ISP (defaults to "Vocus"); no env needed.
+# To keep your ISP name out of git, set VPN_HOME_ISP in .env and uncomment:
+# env:
+#   VPN_HOME_ISP: ${VPN_HOME_ISP}

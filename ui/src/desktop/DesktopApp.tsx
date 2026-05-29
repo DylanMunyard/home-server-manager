@@ -4,12 +4,14 @@ import { ServerDetail } from '../servers/ServerDetail.tsx';
 import { RunbookList } from '../runbooks/RunbookList.tsx';
 import { ScriptViewer } from '../runbooks/ScriptViewer.tsx';
 import { Terminal, type TerminalHandle } from '../terminal/Terminal.tsx';
+import { JobsView } from '../jobs/JobsView.tsx';
 import { useGroups, useServerDetail } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
 import { useSshStream } from '../terminal/useSshStream.ts';
 import { useShellStream } from '../terminal/useShellStream.ts';
 
 type Mode = 'runbook' | 'shell';
+type TopView = 'console' | 'jobs';
 
 const RUN_STATUS_LABEL: Record<string, string> = {
   idle:       'ready',
@@ -31,6 +33,7 @@ export function DesktopApp() {
   const { groups, allServers } = useGroups();
   const { runbooks } = useRunbooks();
   const [mode, setMode] = useState<Mode>('runbook');
+  const [topView, setTopView] = useState<TopView>('console');
   const [serverId, setServerId] = useState<string | null>(null);
   const [runbookId, setRunbookId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -100,10 +103,15 @@ export function DesktopApp() {
     <div className="app">
       <header className="masthead">
         <h1>home-lab</h1>
+        <nav className="top-nav">
+          <button data-active={topView === 'console'} onClick={() => setTopView('console')}>console</button>
+          <button data-active={topView === 'jobs'} onClick={() => setTopView('jobs')}>jobs</button>
+        </nav>
         <span className="meta">{allServers.length} nodes · {groups.length} groups · {runbooks.length} runbooks</span>
         <a className="signout" href="/api/auth/logout">sign out</a>
       </header>
 
+      {topView === 'jobs' ? <JobsView /> : (
       <div className="workspace">
         <ServerRail groups={groups} selectedId={serverId} onSelect={selectServer} />
 
@@ -171,6 +179,7 @@ export function DesktopApp() {
 
         <RunbookList runbooks={runbooks} selectedId={runbookId} onSelect={setRunbookId} />
       </div>
+      )}
     </div>
   );
 }

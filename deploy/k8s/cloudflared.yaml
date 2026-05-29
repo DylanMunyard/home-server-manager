@@ -31,6 +31,11 @@ data:
     ingress:
       - hostname: mgr.munyard.dev
         service: http://home-server-mgr-ui.home-server-mgr.svc.cluster.local:80
+      # Self-hosted ntfy (see ntfy.yaml). Only the phone uses this path — the
+      # API posts to ntfy over the in-cluster Service, not through here.
+      # One-time: cloudflared tunnel route dns home-server-mgr ntfy.munyard.dev
+      - hostname: ntfy.munyard.dev
+        service: http://ntfy.home-server-mgr.svc.cluster.local:80
       - service: http_status:404
 ---
 apiVersion: apps/v1
