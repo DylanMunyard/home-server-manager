@@ -1,6 +1,6 @@
 import { expandEnv } from '../config.js';
 import { loadServer } from '../servers/servers.loader.js';
-import { loadRunbook } from '../runbooks/runbooks.loader.js';
+import { loadRunbook, resolveParamValues, type Runbook } from '../runbooks/runbooks.loader.js';
 import { runScript } from '../ssh/ssh.session.js';
 import { exportPrelude } from '../ssh/prelude.js';
 import type { ServerConfig } from '../servers/servers.types.js';
@@ -35,6 +35,16 @@ function envPrelude(env: Record<string, string> | undefined): string {
     Object.entries(env).map(([k, v]) => [k, expandEnv(v)]),
   );
   return exportPrelude(resolved);
+}
+
+/**
+ * The full `export` prelude for one of the job's runbooks: the job's `env`
+ * (${VAR}-resolved) followed by the runbook's params resolved against the job's
+ * `params` (declared defaults fill in; `params` override on name collision).
+ * Resolved per-runbook because `run` and `then` can declare different params.
+ */
+function runbookPrelude(runbook: Runbook, job: JobConfig): string {
+  return envPrelude(job.env) + exportPrelude(resolveParamValues(runbook.params, job.params ?? {}));
 }
 
 /** Run one runbook over SSH, buffering output into a single RunResult. */
@@ -124,11 +134,9 @@ export async function executeJob(job: JobConfig): Promise<void> {
     const checkRunbook = await loadRunbook(job.run);
     if (!checkRunbook) throw new Error(`unknown run runbook '${job.run}'`);
 
-    // Resolve once per execution — throws here if a ${VAR} is unset, which the
-    // outer catch turns into lastError (no process crash).
-    const prelude = envPrelude(job.env);
-
-    const check = await runRunbookOnce(server, prelude + checkRunbook.contents);
+    // Built per-runbook below. Resolving `env` throws here if a ${VAR} is unset,
+    // which the outer catch turns into lastError (no process crash).
+    const check = await runRunbookOnce(server, runbookPrelude(checkRunbook, job) + checkRunbook.contents);
     s.lastCheck = check;
 
     const triggered = job.when ? triggerMatches(job.when, check) : false;
@@ -142,7 +150,7 @@ export async function executeJob(job: JobConfig): Promise<void> {
     if (triggered && job.then) {
       const actionRunbook = await loadRunbook(job.then);
       if (!actionRunbook) throw new Error(`unknown then runbook '${job.then}'`);
-      action = await runRunbookOnce(server, prelude + actionRunbook.contents);
+      action = await runRunbookOnce(server, runbookPrelude(actionRunbook, job) + actionRunbook.contents);
       s.lastAction = action;
     }
 

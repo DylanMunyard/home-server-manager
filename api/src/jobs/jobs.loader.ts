@@ -73,6 +73,21 @@ function parseEnv(raw: unknown, ctx: string): Record<string, string> | undefined
   return out;
 }
 
+function parseJobParams(raw: unknown, ctx: string): Record<string, string> | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error(`${ctx}: params must be a map of NAME: value`);
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    // Plain values for the runbook's declared params — coerce scalars to string
+    // for ergonomics (e.g. PORT: 8080), reject nested structures.
+    if (v === null || typeof v === 'object') throw new Error(`${ctx}: params.${k} must be a scalar`);
+    out[k] = String(v);
+  }
+  return out;
+}
+
 function buildJob(
   id: string,
   raw: RawJob,
@@ -113,6 +128,7 @@ function buildJob(
     then: raw.then,
     notify: parseNotify(raw.notify, ctx),
     env: parseEnv(raw.env, ctx),
+    params: parseJobParams(raw.params, ctx),
   };
 }
 

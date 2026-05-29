@@ -115,10 +115,11 @@ echo "installing $PKG with $MANAGER"
   (empty string at worst), so scripts stay safe under `set -u`.
 - **No prompting.** Inputs come from the UI before the run, not an interactive
   prompt — there's no TTY (see above). Don't declare a param expecting `read`.
-- **Recurring jobs** feed a parameterized runbook through their own `env:` (params
-  *are* env vars); the job author supplies values there, the param UI is only for
-  manual runs. A malformed `# params:` block is non-fatal — it logs a warning and
-  the runbook loads with no params (same "don't take down the API" stance as jobs).
+- **Recurring jobs** supply values for a parameterized runbook via their own
+  `params:` block (see "Recurring jobs"); the param UI is only for manual runs.
+  Declared defaults still apply when a job omits a value. A malformed `# params:`
+  block is non-fatal — it logs a warning and the runbook loads with no params
+  (same "don't take down the API" stance as jobs).
 
 ## Recurring jobs — one file per job
 
@@ -133,6 +134,7 @@ target: bethany/proxmox      # global server id (<group>/<server>)
 run: vpn-check               # runbook executed each tick — the "check"
 when: { exit: nonzero }      # OPTIONAL: when does the check mean "remediate"?
 then: pia-vpn-reset          # OPTIONAL: runbook run when `when` matches
+params: { PKG: htop }        # OPTIONAL: values for the runbook's `# params:`
 notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 ```
 
@@ -167,6 +169,14 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   stored RAW in `JobConfig` (resolved only at run time) so `GET /api/jobs` never
   leaks the secret; an unset `${VAR}` surfaces as a per-run error (in the job's
   last-run state + logs), never a failed boot.
+- **`params:` supplies a runbook's declared inputs.** Optional
+  `params: { NAME: value }` — *literal* values for the target runbook's
+  `# params:` (see "Runbook inputs"). Resolved per-runbook at run time via the
+  same path as a manual run: the runbook's declared defaults fill in for anything
+  omitted, undeclared keys are dropped, and `run`/`then` each get only what they
+  declare. Distinct from `env`: params are plain non-secret values (surfaced by
+  `GET /api/jobs`) and map to declared inputs; `env` is for `${VAR}` secrets. On a
+  name collision params win (injected after env).
 
 ## Secrets
 

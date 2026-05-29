@@ -81,6 +81,7 @@ export type Job = {
   then?: string;           // remediation runbook id
   notify?: JobNotify;
   env?: Record<string, string>;
+  params?: Record<string, string>;   // literal values for the runbook's declared params
   nextRunAt: string | null;
   state: JobRunState;
 };
