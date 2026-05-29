@@ -64,10 +64,16 @@ spec:
               readOnly: true
           resources:
             requests:
-              memory: "64Mi"
+              memory: "128Mi"
               cpu: "10m"
+            # Steady-state RSS is ~40Mi, but the node:20-slim (glibc) image has
+            # a ~300Mi transient memory spike at startup (faulting in the Node
+            # runtime + module graph) that musl/alpine didn't have. A 256Mi
+            # limit OOM-kills the container mid-startup (exit 137, before it can
+            # even log) — verified by reproducing the OOM locally under a hard
+            # cap. 512Mi gives comfortable headroom over the spike.
             limits:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "500m"
       volumes:
         - name: servers-config
