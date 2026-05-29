@@ -1,0 +1,47 @@
+# Namespace + ServiceAccount + Role + RoleBinding for in-cluster Jenkins
+# deployment auth.
+#
+# Apply with:
+#   kubectl apply -f deploy/k8s/rbac.yaml
+#
+# The Jenkins agent pod runs in this namespace (see Jenkinsfile agent block)
+# under the home-server-mgr-deployer ServiceAccount. kubectl in the pod uses
+# the auto-mounted token — no external kubeconfig credential needed.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: home-server-mgr
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: home-server-mgr-deployer
+  namespace: home-server-mgr
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: home-server-mgr-deployer
+  namespace: home-server-mgr
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: home-server-mgr-deployer
+  namespace: home-server-mgr
+subjects:
+  - kind: ServiceAccount
+    name: home-server-mgr-deployer
+    namespace: home-server-mgr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: home-server-mgr-deployer

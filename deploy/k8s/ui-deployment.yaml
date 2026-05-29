@@ -1,0 +1,47 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: home-server-mgr-ui
+  namespace: home-server-mgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: home-server-mgr-ui
+  template:
+    metadata:
+      labels:
+        app: home-server-mgr-ui
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: ui
+          image: dylanmunyard/home-server-manager:ui
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: home-server-mgr-ui
+  namespace: home-server-mgr
+  labels:
+    app: home-server-mgr-ui
+spec:
+  selector:
+    app: home-server-mgr-ui
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      name: web

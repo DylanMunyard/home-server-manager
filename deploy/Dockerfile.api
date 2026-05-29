@@ -1,0 +1,23 @@
+# Build stage
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY api/package*.json ./
+RUN npm ci
+COPY api/tsconfig.json ./
+COPY api/src ./src
+RUN npm run build && npm prune --omit=dev
+
+# Runtime stage
+FROM node:20-alpine AS runtime
+WORKDIR /app
+RUN addgroup -g 1000 app && adduser -D -u 1000 -G app -h /home/app app
+COPY --from=build --chown=app:app /app/dist ./dist
+COPY --from=build --chown=app:app /app/node_modules ./node_modules
+COPY --from=build --chown=app:app /app/package.json ./package.json
+# config/ is mounted at runtime via ConfigMaps; /home/app/.ssh via Secret.
+# HOME must be set so os.homedir() returns /home/app — the YAML loader
+# expands ~/.ssh/... against it.
+USER app
+ENV HOME=/home/app NODE_ENV=production PORT=5781
+EXPOSE 5781
+CMD ["node", "dist/server.js"]
