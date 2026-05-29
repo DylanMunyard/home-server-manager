@@ -10,14 +10,17 @@ RUN npm run build && npm prune --omit=dev
 # Runtime stage
 FROM node:20-alpine AS runtime
 WORKDIR /app
-RUN addgroup -g 1000 app && adduser -D -u 1000 -G app -h /home/app app
-COPY --from=build --chown=app:app /app/dist ./dist
-COPY --from=build --chown=app:app /app/node_modules ./node_modules
-COPY --from=build --chown=app:app /app/package.json ./package.json
+# node:alpine already ships a `node` user/group at uid/gid 1000 — reuse it
+# rather than creating one (a fresh `addgroup -g 1000` collides). We only
+# need its home dir, which the base image doesn't create.
+RUN mkdir -p /home/app && chown node:node /home/app
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/package.json ./package.json
 # config/ is mounted at runtime via ConfigMaps; /home/app/.ssh via Secret.
 # HOME must be set so os.homedir() returns /home/app — the YAML loader
 # expands ~/.ssh/... against it.
-USER app
+USER node
 ENV HOME=/home/app NODE_ENV=production PORT=5781
 EXPOSE 5781
 CMD ["node", "dist/server.js"]

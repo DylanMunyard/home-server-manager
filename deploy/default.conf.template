@@ -1,3 +1,9 @@
+# Served as an nginx *template*: the stock nginx entrypoint runs envsubst on
+# /etc/nginx/templates/*.template and writes the result to /etc/nginx/conf.d/.
+# Only env vars are substituted (e.g. ${NGINX_LOCAL_RESOLVERS}, set by the
+# image's 15-local-resolvers.envsh from /etc/resolv.conf); nginx runtime vars
+# like $host / $http_upgrade are left intact because they aren't in the env.
+
 # WebSocket upgrade map — required because `Connection: upgrade` must only
 # be set when the client actually sent `Upgrade: websocket`.
 map $http_upgrade $connection_upgrade {
@@ -5,17 +11,20 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
-upstream home_server_mgr_api {
-    server home-server-mgr-api:5781;
-}
-
 server {
     listen 80;
     server_name _;
 
+    # Resolve the API Service name lazily, per-request, via the cluster DNS.
+    # Without this nginx resolves proxy_pass upstreams at config-load time and
+    # crashes (`host not found in upstream`) if the API isn't up yet — which
+    # happens because UI and API deploy in parallel.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+
     # WebSocket — script output streaming + interactive shell.
     location /ws/ {
-        proxy_pass http://home_server_mgr_api;
+        set $api_upstream http://home-server-mgr-api:5781;
+        proxy_pass $api_upstream;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -26,7 +35,8 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://home_server_mgr_api;
+        set $api_upstream http://home-server-mgr-api:5781;
+        proxy_pass $api_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

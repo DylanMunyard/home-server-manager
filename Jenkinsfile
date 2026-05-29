@@ -50,7 +50,7 @@ pipeline {
           // deploy manifests change. config/ changes redeploy the API only
           // (to refresh the mounted ConfigMaps).
           env.API_CHANGED = (changedFiles.any { it.startsWith('api/') || it == 'deploy/Dockerfile.api' || it.startsWith('deploy/k8s/api-') }) ? 'true' : 'false'
-          env.UI_CHANGED  = (changedFiles.any { it.startsWith('ui/')  || it == 'deploy/Dockerfile.ui'  || it == 'deploy/nginx.conf' || it.startsWith('deploy/k8s/ui-') }) ? 'true' : 'false'
+          env.UI_CHANGED  = (changedFiles.any { it.startsWith('ui/')  || it == 'deploy/Dockerfile.ui'  || it == 'deploy/default.conf.template' || it.startsWith('deploy/k8s/ui-') }) ? 'true' : 'false'
           env.CONFIG_CHANGED = changedFiles.any { it.startsWith('config/') } ? 'true' : 'false'
 
           echo "API_CHANGED=${env.API_CHANGED}, UI_CHANGED=${env.UI_CHANGED}, CONFIG_CHANGED=${env.CONFIG_CHANGED}"
