@@ -39,12 +39,16 @@ spec:
             - secretRef:
                 name: home-server-mgr-secrets
                 optional: true
+          # The compiled config loader resolves the config dir relative to its
+          # own location: dist/config.js → ../../config → /config (the runtime
+          # image has dist at /app/dist, not api/dist, so it overshoots to the
+          # filesystem root). Mount the ConfigMaps there to match.
           volumeMounts:
             - name: servers-config
-              mountPath: /app/config/servers
+              mountPath: /config/servers
               readOnly: true
             - name: scripts-config
-              mountPath: /app/config/scripts
+              mountPath: /config/scripts
               readOnly: true
             - name: ssh-keys
               mountPath: /home/app/.ssh
