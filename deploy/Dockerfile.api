@@ -1,5 +1,11 @@
 # Build stage
-FROM node:20-alpine AS build
+#
+# Debian-based (glibc), NOT alpine: @fastify/secure-session depends on
+# sodium-native, whose bundled prebuilds cover linux-x64 (glibc) but NOT
+# linux-x64-musl. On alpine the native addon can't load and there's no
+# toolchain to build it, so the API crash-loops with ADDON_NOT_FOUND. The
+# glibc prebuild loads as-is here.
+FROM node:20-slim AS build
 WORKDIR /app
 COPY api/package*.json ./
 RUN npm ci
@@ -8,10 +14,10 @@ COPY api/src ./src
 RUN npm run build && npm prune --omit=dev
 
 # Runtime stage
-FROM node:20-alpine AS runtime
+FROM node:20-slim AS runtime
 WORKDIR /app
-# node:alpine already ships a `node` user/group at uid/gid 1000 — reuse it
-# rather than creating one (a fresh `addgroup -g 1000` collides). We only
+# node:20-slim already ships a `node` user/group at uid/gid 1000 — reuse it
+# rather than creating one (a fresh useradd at 1000 collides). We only
 # need its home dir, which the base image doesn't create.
 RUN mkdir -p /home/app && chown node:node /home/app
 COPY --from=build --chown=node:node /app/dist ./dist
