@@ -45,8 +45,10 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
   border-bottom: 1px solid var(--line);
   gap: 24px;
 }
-.masthead h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; text-transform: lowercase; }
+.masthead h1 { margin: 0 auto 0 0; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; text-transform: lowercase; }
 .masthead .meta { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; }
+.masthead .signout { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; text-decoration: none; border-bottom: 1px solid var(--line-soft); }
+.masthead .signout:hover { color: var(--ink); border-bottom-color: var(--line); }
 
 .workspace {
   display: grid;
@@ -216,8 +218,18 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 }
 .m-topbar .m-wm { font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
 .m-topbar .m-meta { font-size: 10px; color: var(--m-ink-3); letter-spacing: 0.18em; text-transform: uppercase; }
+.m-topbar-right { display: flex; align-items: center; gap: 14px; }
+.m-signout { font-size: 10px; color: var(--m-ink-3); letter-spacing: 0.18em; text-transform: uppercase; text-decoration: none; border-bottom: 1px solid var(--m-line); }
 .m-back { font-size: 12px; font-weight: 600; color: var(--m-ink); }
 .m-back::before { content: "← "; color: var(--m-ink-3); }
+
+/* Login splash (shown before either shell mounts; uses desktop palette) */
+.login { height: 100%; display: grid; place-items: center; background: var(--bg); }
+.login-card { border: 1px solid var(--line); padding: 40px 44px; text-align: center; background: var(--bg-2); }
+.login-card h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 0.04em; text-transform: lowercase; }
+.login-meta { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; margin: 8px 0 28px; }
+.login-btn { display: inline-block; text-decoration: none; background: var(--accent); border: 1px solid var(--line); color: var(--ink); padding: 10px 28px; font-weight: 700; font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; }
+.login-btn:hover { background: var(--ink); color: var(--accent); }
 
 /* Section bar */
 .m-section {

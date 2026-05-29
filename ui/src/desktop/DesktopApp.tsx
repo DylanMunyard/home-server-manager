@@ -101,6 +101,7 @@ export function DesktopApp() {
       <header className="masthead">
         <h1>home-lab</h1>
         <span className="meta">{allServers.length} nodes · {groups.length} groups · {runbooks.length} runbooks</span>
+        <a className="signout" href="/api/auth/logout">sign out</a>
       </header>
 
       <div className="workspace">

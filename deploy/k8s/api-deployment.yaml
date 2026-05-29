@@ -31,10 +31,19 @@ spec:
               value: "5781"
             - name: HOME
               value: "/home/app"
+            # Public URL the app is reached at — used to build the OAuth
+            # callback URI and (because the image bakes NODE_ENV=production) to
+            # set Secure cookies. Not a secret, so it lives here. Set to your
+            # real domain.
+            - name: PUBLIC_URL
+              value: "https://mgr.munyard.dev"
           # envFrom pulls every key in home-server-mgr-secrets in as an env
           # var. Add a new ${VAR} to config/servers/*.yaml? Just add the same
-          # key to the Secret — no Deployment edit needed. optional=true so
-          # the pod still starts if no secret-backed vars are needed yet.
+          # key to the Secret — no Deployment edit needed. The Discord OAuth +
+          # session secrets (DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET,
+          # ALLOWED_DISCORD_IDS, SESSION_SECRET, SESSION_SALT) ride in the same
+          # way. optional=true so the pod still starts if no secret-backed vars
+          # are needed yet.
           envFrom:
             - secretRef:
                 name: home-server-mgr-secrets

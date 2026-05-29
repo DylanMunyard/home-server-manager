@@ -108,6 +108,33 @@ Rules:
 - Shell-set env vars win over `.env` (dotenv `override: false` — the default).
   Useful for one-off overrides without editing the file.
 
+## Auth
+
+The app is internet-exposed, so every `/api/*` and `/ws/*` route is gated behind
+a **Discord OAuth** login (`api/src/auth/`). It's single-user: an allowlist of
+Discord user ids (`ALLOWED_DISCORD_IDS`) is the entire authz model.
+
+- **Session = stateless encrypted cookie** (`@fastify/secure-session`, cookie
+  `hsm_session`). No server-side session store — keeps the no-DB / clone-and-go
+  property. Don't add Redis or a session table.
+- **The guard** is one `onRequest` hook in `auth.plugin.ts`. Public paths:
+  `/api/health` (k8s liveness + verify loop) and `/api/auth/*`. Everything else
+  needs a session, including the WS upgrades — a 401 there aborts the upgrade
+  before any SSH connection.
+- **Config is env-driven** (see `.env.example`): `DISCORD_CLIENT_ID`,
+  `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`, `PUBLIC_URL`, `SESSION_SECRET`
+  (≥32 chars), `SESSION_SALT` (exactly 16). `auth.config.ts` throws at startup
+  if any is missing/invalid — fail loud, same as the YAML loader.
+- **`PUBLIC_URL`** builds the OAuth callback (`${PUBLIC_URL}/api/auth/callback`)
+  and gates the `Secure` cookie flag (on only when `NODE_ENV=production`, which
+  the prod image bakes in — so cookies work over plain-HTTP localhost in dev).
+- **Local dev uses the real OAuth flow** (no bypass): register
+  `http://localhost:5780/api/auth/callback` as a second redirect URL in the
+  Discord app and log in once; the cookie persists.
+- **Frontend** gates at `ui/src/App.tsx` via `useAuth()` (`auth/`) — anon →
+  `LoginScreen`, so the terminal WS only ever opens once authed. `shared/api.ts`
+  bounces a `401` to `/api/auth/login` for mid-session expiry.
+
 ## Ports
 
 - UI dev server: **5780**
@@ -178,7 +205,8 @@ quick checks.
 
 ## What's intentionally out of scope (don't add without asking)
 
-- App-level auth (LAN-fronted only)
+- Multi-user auth / roles — login exists (Discord OAuth, see "Auth"), but it's a
+  single-identity allowlist. Don't add user management, RBAC, or per-user state.
 - History / audit log of runs (no "logs" tab in mobile either — that's why
   the design's 3-tab bar is implemented as 2)
 - Persistent DB of any kind

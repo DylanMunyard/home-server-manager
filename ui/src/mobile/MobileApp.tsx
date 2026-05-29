@@ -82,9 +82,9 @@ export function MobileApp() {
   function renderTopBar() {
     switch (view.kind) {
       case 'books':
-        return <TopBar meta={`${allServers.length}N · ${groups.length}G · ${runbooks.length}R`} />;
+        return <TopBar signOut meta={`${allServers.length}N · ${groups.length}G · ${runbooks.length}R`} />;
       case 'servers':
-        return <TopBar meta={`${allServers.length}N · ${groups.length}G`} />;
+        return <TopBar signOut meta={`${allServers.length}N · ${groups.length}G`} />;
       case 'book-detail':
         return <TopBar onBack={back} backLabel="runbooks" meta="RUNBOOK" />;
       case 'running':
