@@ -11,7 +11,7 @@ type RawJob = {
   name?: string;
   description?: string;
   schedule?: string;
-  target?: string;
+  target?: unknown;       // string OR list of strings (normalised to targets[])
   run?: string;
   when?: { exit?: unknown; stdout_contains?: unknown };
   then?: string;
@@ -22,6 +22,19 @@ type RawJob = {
 
 const NOTIFY_EVENTS: NotifyEvent[] = ['action', 'error'];
 const PRIORITIES = new Set(['min', 'low', 'default', 'high', 'max']);
+
+/** `target` accepts a single id or a list; always normalised to a non-empty list. */
+function parseTargets(raw: unknown, ctx: string): string[] {
+  if (raw === undefined) throw new Error(`${ctx}: missing 'target'`);
+  const list = Array.isArray(raw) ? raw : [raw];
+  if (list.length === 0) throw new Error(`${ctx}: 'target' list is empty`);
+  return list.map((t) => {
+    if (typeof t !== 'string' || t.trim() === '') {
+      throw new Error(`${ctx}: each target must be a non-empty '<group>/<server>' string`);
+    }
+    return t;
+  });
+}
 
 function parseTrigger(raw: RawJob['when'], ctx: string): Trigger | undefined {
   if (raw === undefined) return undefined;
@@ -96,8 +109,8 @@ function buildJob(
 ): JobConfig {
   const ctx = `job ${id}`;
   if (!raw.schedule) throw new Error(`${ctx}: missing 'schedule'`);
-  if (!raw.target) throw new Error(`${ctx}: missing 'target'`);
   if (!raw.run) throw new Error(`${ctx}: missing 'run'`);
+  const targets = parseTargets(raw.target, ctx);
 
   // Validate cron up front so a typo fails at startup, not at the first tick.
   try {
@@ -106,7 +119,9 @@ function buildJob(
     throw new Error(`${ctx}: invalid schedule '${raw.schedule}' — ${(err as Error).message}`);
   }
 
-  if (!serverIds.has(raw.target)) throw new Error(`${ctx}: unknown target '${raw.target}'`);
+  for (const t of targets) {
+    if (!serverIds.has(t)) throw new Error(`${ctx}: unknown target '${t}'`);
+  }
   if (!runbookIds.has(raw.run)) throw new Error(`${ctx}: unknown run runbook '${raw.run}'`);
   if (raw.then !== undefined && !runbookIds.has(raw.then)) {
     throw new Error(`${ctx}: unknown then runbook '${raw.then}'`);
@@ -122,7 +137,7 @@ function buildJob(
     name: raw.name ?? id,
     description: raw.description,
     schedule: raw.schedule,
-    target: raw.target,
+    targets,
     run: raw.run,
     when,
     then: raw.then,

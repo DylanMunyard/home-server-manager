@@ -249,7 +249,7 @@ function JobDetailRoute({ jobs, runningId, runJob }: {
   return (
     <>
       <TopBar onBack={() => navigate('/m/jobs')} backLabel="jobs" meta="JOB" />
-      <div className="m-screen-body">
+      <div className="m-screen-body m-jscroll">
         <JobDetailScreen
           job={job}
           checkRunbook={jobCheck}

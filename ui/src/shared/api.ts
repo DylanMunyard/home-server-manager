@@ -59,15 +59,21 @@ export type RunResult = {
   durationMs: number;
 };
 
-// Mirrors the API's in-memory JobRunState. No history — single last-run snapshot.
-export type JobRunState = {
-  running: boolean;
-  lastRunAt?: string;
-  lastDurationMs?: number;
+// Mirrors the API's per-target outcome within a JobRunState.
+export type TargetRunState = {
   lastCheck?: RunResult;
   lastTriggered?: boolean;
   lastAction?: RunResult;
   lastError?: string;
+};
+
+// Mirrors the API's in-memory JobRunState. No history — single last-run snapshot
+// per target (keyed by global server id).
+export type JobRunState = {
+  running: boolean;
+  lastRunAt?: string;
+  lastDurationMs?: number;
+  targets: Record<string, TargetRunState>;
 };
 
 export type Job = {
@@ -75,7 +81,7 @@ export type Job = {
   name: string;
   description?: string;
   schedule: string;        // raw 5-field cron
-  target: string;          // "<group>/<server>"
+  targets: string[];       // one or more "<group>/<server>"
   run: string;             // check runbook id
   when?: JobTrigger;
   then?: string;           // remediation runbook id

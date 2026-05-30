@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { testAlert, type Job, type Runbook } from '../shared/api.ts';
-import { condText, humanizeCron, summarizeJobRun, uiState } from '../jobs/cron.ts';
+import { condText, humanizeCron, summarizeJobRun, summarizeTarget, uiState } from '../jobs/cron.ts';
 
 type Props = {
   job: Job;
@@ -28,14 +28,18 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
   const sendTestAlert = async () => {
     setAlertBusy(true);
     setAlertMsg(null);
-    const r = await testAlert(job.run, job.target);
+    // Representative single host — real alerts fire per-target, so the test
+    // mirrors that rather than listing every node.
+    const r = await testAlert(job.run, job.targets[0]);
     setAlertBusy(false);
     setAlertMsg(r.sent ? 'SENT ✓' : 'FAILED');
   };
   const state = uiState(job.state.running);
   const { human } = humanizeCron(job.schedule);
   const notifyOn = job.notify?.on ?? [];
-  const [group, server] = job.target.split('/');
+  const single = job.targets.length === 1;
+  const [group, server] = job.targets[0].split('/');
+  const runsOn = single ? server : `${job.targets.length} hosts`;
 
   return (
     <>
@@ -53,7 +57,7 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
         </div>
         {job.description && <div className="m-dhead-desc">{job.description}</div>}
         <div className="m-dhead-target">
-          <span className="m-chip"><span className="m-chip-dot" />{server}</span>
+          <span className="m-chip"><span className="m-chip-dot" />{runsOn}</span>
           <span className="m-chip" style={{ color: state === 'running' ? 'var(--m-ok)' : undefined }}>
             <span className="m-chip-dot" style={{ background: state === 'running' ? 'var(--m-ok)' : undefined }} />
             enabled
@@ -69,9 +73,22 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
         </div>
         <div>
           <div className="k">runs on</div>
-          <div className="big">{server}</div>
-          <div className="raw">{group}</div>
+          <div className="big">{runsOn}</div>
+          <div className="raw">{single ? group : job.targets.map((t) => t.split('/')[1]).join(', ')}</div>
         </div>
+      </div>
+
+      {/* per-target last-run status */}
+      <div className="m-jtargets">
+        {job.targets.map((t) => {
+          const o = !running ? summarizeTarget(job, job.state.targets[t]) : null;
+          return (
+            <div key={t} className="m-jtarget">
+              <span className="nm">{t.split('/')[1]}</span>
+              {o ? <span className={`m-jobout ${o.tone}`}>{o.text}</span> : <span className="dim">—</span>}
+            </div>
+          );
+        })}
       </div>
 
       <div className="m-content">
@@ -84,7 +101,7 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
               <div className="m-jbk">{job.run}</div>
               {checkRunbook?.description && <div className="m-jbd">{checkRunbook.description}</div>}
               <Peek runbook={checkRunbook} />
-              <div className="m-jmeta">on <b>{job.target}</b> · exit code drives the gate ↓</div>
+              <div className="m-jmeta">on <b>{job.targets.join(', ')}</b> · exit code drives the gate ↓</div>
             </div>
           </div>
 

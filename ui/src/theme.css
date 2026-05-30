@@ -250,6 +250,11 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .job-meta-cell dd.state.running { color: var(--ok); }
 .job-meta-cell dd.state.running .dot { background: var(--ok); border-radius: 50%; }
 .job-meta-cell dd.state.armed .dot { background: var(--ink); }
+/* per-target last-run status (the target meta cell grows to fit the list) */
+.job-targets-cell { flex: 1 1 280px; }
+.job-targets { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.job-target { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+.job-target .mono .dim { color: var(--ink-3); }
 
 /* the vertical flow: check → gate → remediate → notify */
 .flow { padding: 18px 22px 8px; }
@@ -501,6 +506,14 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
   flex-shrink: 0;
 }
 .m-actionbar.two .m-run-btn { flex: 1; }
+
+/* Job detail: scroll the whole screen natively instead of squeezing the flow
+ * into a tiny inner scroller above a pinned action bar. The body becomes the
+ * scroller; the flow takes natural height and the buttons scroll to the end of
+ * the content. Scoped to .m-jscroll so other screens keep the pinned bar. */
+.m-jscroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.m-jscroll .m-content { flex: 0 0 auto; overflow: visible; }
+.m-jscroll .m-actionbar { position: static; }
 .m-run-btn {
   flex: 1;
   background: var(--m-hl);
@@ -565,6 +578,15 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .m-jsched .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--m-ink-3); }
 .m-jsched .big { font-size: 17px; font-weight: 700; color: var(--m-ink); margin-top: 4px; }
 .m-jsched .raw { font-size: 11px; color: var(--m-ink-3); margin-top: 2px; }
+
+/* per-target last-run status list */
+.m-jtargets { border-bottom: 1px solid var(--m-line); background: var(--m-paper); }
+.m-jtarget { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 18px; border-top: 1px solid var(--m-line); }
+.m-jtarget:first-child { border-top: none; }
+.m-jtarget .nm { font-size: 13px; font-weight: 700; color: var(--m-ink); }
+.m-jtarget .dim { color: var(--m-ink-3); font-size: 12px; }
+/* compact, inline variant of the status pill when it sits in a row */
+.m-jtarget .m-jobout { padding: 0; border-top: none; background: none; flex-shrink: 1; text-align: right; }
 
 /* the flow */
 .m-jflow { padding: 16px 18px 4px; }

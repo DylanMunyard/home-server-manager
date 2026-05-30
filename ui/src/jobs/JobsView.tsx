@@ -3,8 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 import { useJobs } from './useJobs.ts';
 import { useRunbook } from '../runbooks/useRunbooks.ts';
 import { JobFlow } from './JobFlow.tsx';
-import { humanizeCron, summarizeJobRun, uiState } from './cron.ts';
+import { humanizeCron, summarizeJobRun, summarizeTarget, uiState } from './cron.ts';
 import { testAlert, type Job } from '../shared/api.ts';
+
+// "proxmox" for a one-host job, "3 hosts" for a fan-out.
+function targetsLabel(job: Job): string {
+  return job.targets.length === 1 ? job.targets[0].split('/')[1] : `${job.targets.length} hosts`;
+}
 
 function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: () => void }) {
   const state = uiState(job.state.running);
@@ -16,7 +21,7 @@ function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: ()
       <span>
         <div className="name">{job.name}</div>
         <div className="sub">{chain}</div>
-        <div className="sub">⏲ {human} · {job.target.split('/')[1]}</div>
+        <div className="sub">⏲ {human} · {targetsLabel(job)}</div>
       </span>
       <span className="job-row-right">
         <span className="cad">{cadence}</span>
@@ -39,7 +44,9 @@ export function JobsView() {
     if (!job) return;
     setAlertBusy(true);
     setAlertMsg(null);
-    const r = await testAlert(job.run, job.target);
+    // Representative single host — real alerts fire per-target, so the test
+    // mirrors that rather than listing every node.
+    const r = await testAlert(job.run, job.targets[0]);
     setAlertBusy(false);
     setAlertMsg(r.sent ? 'test alert sent ✓' : `alert failed: ${r.reason ?? 'unknown'}`);
   };
@@ -115,24 +122,29 @@ export function JobsView() {
                   <dd className="raw">{job.schedule}</dd>
                 </div>
                 <div className="job-meta-cell">
-                  <dt>target</dt>
-                  <dd className="mono">
-                    <span className="dim">{job.target.split('/')[0]}/</span>{job.target.split('/')[1]}
-                  </dd>
-                </div>
-                <div className="job-meta-cell">
                   <dt>state</dt>
                   <dd className={`state ${state}`}>
                     <span className={`dot ${state}`} />
                     {state === 'running' ? 'enabled · checking now' : 'enabled · waiting for tick'}
                   </dd>
                 </div>
-                {job.state.lastError && (
-                  <div className="job-meta-cell">
-                    <dt>last error</dt>
-                    <dd className="err">{job.state.lastError}</dd>
-                  </div>
-                )}
+                <div className="job-meta-cell job-targets-cell">
+                  <dt>{job.targets.length === 1 ? 'target' : `targets · ${job.targets.length}`}</dt>
+                  <dd>
+                    <ul className="job-targets">
+                      {job.targets.map((t) => {
+                        const [g, srv] = t.split('/');
+                        const o = !isRunning ? summarizeTarget(job, job.state.targets[t]) : null;
+                        return (
+                          <li key={t} className="job-target">
+                            <span className="mono"><span className="dim">{g}/</span>{srv}</span>
+                            {o && <span className={`job-run-outcome ${o.tone}`}>{o.text}</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </dd>
+                </div>
               </dl>
             </div>
 

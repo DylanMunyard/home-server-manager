@@ -53,7 +53,7 @@ export function JobsScreen({ jobs, selectedId, onPick }: Props) {
               <span className="m-row-body">
                 <span className="m-row-nm">{j.name}</span>
                 <span className="m-row-sub chain">{chain}</span>
-                <span className="m-row-sub">⏲ {human} · {j.target.split('/')[1]}</span>
+                <span className="m-row-sub">⏲ {human} · {j.targets.length === 1 ? j.targets[0].split('/')[1] : `${j.targets.length} hosts`}</span>
               </span>
               <span className="m-jrow-state">
                 <span className="cad">{cadence}</span>

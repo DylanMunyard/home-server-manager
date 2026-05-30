@@ -5,7 +5,7 @@ import { runScript } from '../ssh/ssh.session.js';
 import { exportPrelude } from '../ssh/prelude.js';
 import type { ServerConfig } from '../servers/servers.types.js';
 import { sendAlert } from '../alerts/ntfy.js';
-import type { JobConfig, JobRunState, RunResult, Trigger } from './jobs.types.js';
+import type { JobConfig, JobRunState, RunResult, TargetRunState, Trigger } from './jobs.types.js';
 
 // In-memory job state. Lost on restart by design — the scheduler just starts
 // fresh. No DB, no state file (see plan / CLAUDE.md no-persistence rule).
@@ -14,7 +14,7 @@ const state = new Map<string, JobRunState>();
 export function getState(id: string): JobRunState {
   let s = state.get(id);
   if (!s) {
-    s = { running: false };
+    s = { running: false, targets: {} };
     state.set(id, s);
   }
   return s;
@@ -110,37 +110,27 @@ function alertBody(target: string, runbook: string, r: RunResult): string {
 }
 
 /**
- * Execute a job once: run the check, evaluate `when`, optionally run `then`,
- * then fire ntfy alerts per `notify`. Updates in-memory state. Never throws —
- * scheduler ticks must not crash the process.
+ * Run the job's check (+ optional `then` + alerts) against ONE target, returning
+ * that target's outcome. Never throws — a bad target must not abort its siblings
+ * or crash the scheduler tick. The notify semantics are unchanged from the
+ * single-target days; they just key on this target.
  */
-export async function executeJob(job: JobConfig): Promise<void> {
-  const s = getState(job.id);
-  if (s.running) {
-    console.warn(`[jobs] ${job.id}: previous run still in flight — skipping tick`);
-    return;
-  }
-  s.running = true;
-  const start = Date.now();
-  // Reset the per-run fields so stale results don't linger after a clean run.
-  s.lastTriggered = false;
-  s.lastAction = undefined;
-  s.lastError = undefined;
-
+async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunState> {
+  const ts: TargetRunState = {};
   try {
-    const server = await loadServer(job.target);
-    if (!server) throw new Error(`unknown target '${job.target}'`);
+    const server = await loadServer(target);
+    if (!server) throw new Error(`unknown target '${target}'`);
 
     const checkRunbook = await loadRunbook(job.run);
     if (!checkRunbook) throw new Error(`unknown run runbook '${job.run}'`);
 
-    // Built per-runbook below. Resolving `env` throws here if a ${VAR} is unset,
-    // which the outer catch turns into lastError (no process crash).
+    // Resolving `env` throws here if a ${VAR} is unset, which the catch turns
+    // into this target's lastError (no process crash, siblings unaffected).
     const check = await runRunbookOnce(server, runbookPrelude(checkRunbook, job) + checkRunbook.contents);
-    s.lastCheck = check;
+    ts.lastCheck = check;
 
     const triggered = job.when ? triggerMatches(job.when, check) : false;
-    s.lastTriggered = triggered;
+    ts.lastTriggered = triggered;
 
     // The "work runbook" whose failure counts as an `error` for alerting:
     // `then` if it ran, else the check when the job has no `when` (i.e. the
@@ -151,7 +141,7 @@ export async function executeJob(job: JobConfig): Promise<void> {
       const actionRunbook = await loadRunbook(job.then);
       if (!actionRunbook) throw new Error(`unknown then runbook '${job.then}'`);
       action = await runRunbookOnce(server, runbookPrelude(actionRunbook, job) + actionRunbook.contents);
-      s.lastAction = action;
+      ts.lastAction = action;
     }
 
     const events = new Set(job.notify?.on ?? []);
@@ -161,8 +151,8 @@ export async function executeJob(job: JobConfig): Promise<void> {
     if (action && events.has('action')) {
       const ok = !failed(action);
       await sendAlert({
-        title: `${job.name}: ran ${job.then} on ${job.target}`,
-        body: alertBody(job.target, job.then!, action),
+        title: `${job.name}: ran ${job.then} on ${target}`,
+        body: alertBody(target, job.then!, action),
         priority,
         tags: [ok ? 'wrench' : 'rotating_light'],
       });
@@ -171,29 +161,29 @@ export async function executeJob(job: JobConfig): Promise<void> {
     // `error` event — the effective work runbook failed.
     if (events.has('error')) {
       if (action && failed(action)) {
-        s.lastError = `then '${job.then}' failed: ${failureSummary(action)}`;
+        ts.lastError = `then '${job.then}' failed: ${failureSummary(action)}`;
         await sendAlert({
-          title: `${job.name}: ${job.then} FAILED on ${job.target}`,
-          body: alertBody(job.target, job.then!, action),
+          title: `${job.name}: ${job.then} FAILED on ${target}`,
+          body: alertBody(target, job.then!, action),
           priority: priority ?? 'high',
           tags: ['rotating_light'],
         });
       } else if (!job.when && failed(check)) {
         // Plain scheduled job: the check is the work, so its failure is an error.
-        s.lastError = `run '${job.run}' failed: ${failureSummary(check)}`;
+        ts.lastError = `run '${job.run}' failed: ${failureSummary(check)}`;
         await sendAlert({
-          title: `${job.name}: ${job.run} FAILED on ${job.target}`,
-          body: alertBody(job.target, job.run, check),
+          title: `${job.name}: ${job.run} FAILED on ${target}`,
+          body: alertBody(target, job.run, check),
           priority: priority ?? 'high',
           tags: ['rotating_light'],
         });
       } else if (check.error) {
         // Even a check (with a `when`) can hit an SSH-level error — that's not
         // a trigger signal, it's a genuine failure worth surfacing.
-        s.lastError = `run '${job.run}' could not execute: ${check.error}`;
+        ts.lastError = `run '${job.run}' could not execute: ${check.error}`;
         await sendAlert({
-          title: `${job.name}: ${job.run} could not run on ${job.target}`,
-          body: alertBody(job.target, job.run, check),
+          title: `${job.name}: ${job.run} could not run on ${target}`,
+          body: alertBody(target, job.run, check),
           priority: priority ?? 'high',
           tags: ['rotating_light'],
         });
@@ -201,13 +191,36 @@ export async function executeJob(job: JobConfig): Promise<void> {
     }
 
     console.log(
-      `[jobs] ${job.id}: check exit=${check.exitCode}${check.error ? ` error=${check.error}` : ''}` +
+      `[jobs] ${job.id}@${target}: check exit=${check.exitCode}${check.error ? ` error=${check.error}` : ''}` +
       ` triggered=${triggered}` +
       (action ? ` action(${job.then}) exit=${action.exitCode}${action.error ? ` error=${action.error}` : ''}` : ''),
     );
   } catch (err) {
-    s.lastError = (err as Error).message;
-    console.error(`[jobs] ${job.id}: ${(err as Error).message}`);
+    ts.lastError = (err as Error).message;
+    console.error(`[jobs] ${job.id}@${target}: ${(err as Error).message}`);
+  }
+  return ts;
+}
+
+/**
+ * Execute a job once: fan out across every `target` in parallel (independent SSH
+ * sessions), recording each target's outcome. Updates in-memory state. Never
+ * throws — scheduler ticks must not crash the process.
+ */
+export async function executeJob(job: JobConfig): Promise<void> {
+  const s = getState(job.id);
+  if (s.running) {
+    console.warn(`[jobs] ${job.id}: previous run still in flight — skipping tick`);
+    return;
+  }
+  s.running = true;
+  const start = Date.now();
+  // Reset per-run results so a removed target / stale outcome doesn't linger.
+  s.targets = {};
+
+  try {
+    const results = await Promise.all(job.targets.map((t) => runOnTarget(job, t)));
+    job.targets.forEach((t, i) => { s.targets[t] = results[i]; });
   } finally {
     s.running = false;
     s.lastRunAt = new Date(start).toISOString();

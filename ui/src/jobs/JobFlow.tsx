@@ -39,7 +39,7 @@ export function JobFlow({ job, checkRunbook, remediateRunbook }: Props) {
           <div className="flow-kind ok">{human} · run check</div>
           <BookRef id={job.run} runbook={checkRunbook} />
           <div className="flow-meta">
-            on <b>{job.target}</b> · exit code drives the gate ↓
+            on <b>{job.targets.join(', ')}</b> · exit code drives the gate ↓
           </div>
         </div>
       </div>

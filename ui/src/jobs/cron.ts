@@ -1,4 +1,4 @@
-import type { JobTrigger } from '../shared/api.ts';
+import type { Job, JobTrigger, TargetRunState } from '../shared/api.ts';
 
 // Tiny, dependency-free humanizer for the cron shapes a personal homelab
 // actually uses. Anything it doesn't recognise falls back to the raw cron,
@@ -71,27 +71,45 @@ export function uiState(running: boolean): JobUiState {
 // Maps the post-run JobRunState into {tone, text}, where tone steers colour.
 export type JobRunOutcome = { tone: 'ok' | 'warn' | 'err'; text: string };
 
-export function summarizeJobRun(job: import('../shared/api.ts').Job): JobRunOutcome | null {
-  const s = job.state;
-  if (!s.lastRunAt) return null;
-  if (s.lastError) return { tone: 'err', text: `failed · ${s.lastError}` };
+// One target's outcome. Mirrors the engine's per-target notify semantics.
+export function summarizeTarget(job: Job, ts: TargetRunState | undefined): JobRunOutcome | null {
+  if (!ts) return null;
+  if (ts.lastError) return { tone: 'err', text: `failed · ${ts.lastError}` };
   // Job with remediation: triggered=true means the check fired and `then` ran.
-  if (s.lastTriggered && s.lastAction) {
-    const code = s.lastAction.exitCode;
+  if (ts.lastTriggered && ts.lastAction) {
+    const code = ts.lastAction.exitCode;
     return code === 0
       ? { tone: 'warn', text: `remediation '${job.then}' ran · exit 0` }
       : { tone: 'err', text: `remediation '${job.then}' exit ${code ?? '?'}` };
   }
   // Pure monitor (no `when`): the check IS the work.
-  if (!job.when && s.lastCheck) {
-    const code = s.lastCheck.exitCode;
+  if (!job.when && ts.lastCheck) {
+    const code = ts.lastCheck.exitCode;
     return code === 0
       ? { tone: 'ok', text: 'passed · exit 0' }
       : { tone: 'err', text: `failed · exit ${code ?? '?'}` };
   }
   // Conditional job, gate didn't trip — healthy.
-  if (s.lastCheck && !s.lastTriggered) {
-    return { tone: 'ok', text: `healthy · check exit ${s.lastCheck.exitCode ?? '?'}` };
+  if (ts.lastCheck && !ts.lastTriggered) {
+    return { tone: 'ok', text: `healthy · check exit ${ts.lastCheck.exitCode ?? '?'}` };
   }
   return null;
+}
+
+// Whole-job glance pill: the single target's outcome for a one-host job, else a
+// rolled-up tally (worst tone wins) across all targets.
+export function summarizeJobRun(job: Job): JobRunOutcome | null {
+  if (!job.state.lastRunAt) return null;
+  const outs = job.targets
+    .map((t) => summarizeTarget(job, job.state.targets[t]))
+    .filter((o): o is JobRunOutcome => o !== null);
+  if (outs.length === 0) return null;
+  if (job.targets.length === 1) return outs[0];
+
+  const err = outs.filter((o) => o.tone === 'err').length;
+  const warn = outs.filter((o) => o.tone === 'warn').length;
+  const n = job.targets.length;
+  if (err) return { tone: 'err', text: `${err}/${n} hosts failed` };
+  if (warn) return { tone: 'warn', text: `${warn}/${n} hosts remediated` };
+  return { tone: 'ok', text: `all ${n} hosts healthy` };
 }

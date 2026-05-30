@@ -130,7 +130,7 @@ Filename stem = job id. Engine is `api/src/jobs/`; alerts are `api/src/alerts/`.
 # config/jobs/vpn-watchdog.yaml
 name: VPN watchdog
 schedule: "*/5 * * * *"      # 5-field cron, evaluated in the API process TZ
-target: bethany/proxmox      # global server id (<group>/<server>)
+target: bethany/proxmox      # global server id, OR a list (see multi-target below)
 run: vpn-check               # runbook executed each tick — the "check"
 when: { exit: nonzero }      # OPTIONAL: when does the check mean "remediate"?
 then: pia-vpn-reset          # OPTIONAL: runbook run when `when` matches
@@ -142,6 +142,12 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   API process (`jobs.scheduler.ts`, croner); on restart, schedules start fresh.
   No DB, no run history, no state file — same clone-and-go property as the rest.
   Holds last-run state in a `Map` only (surfaced read-only at `GET /api/jobs`).
+- **Multi-target fan-out.** `target` accepts a single `<group>/<server>` string
+  *or* a YAML list. The engine normalises to `targets[]` and runs the check (+
+  `then` + alerts) against each host **in parallel**, with independent results.
+  Per-target outcomes are surfaced under `state.targets` (keyed by server id) at
+  `GET /api/jobs`. `params`/`env` are job-wide — group hosts that share a
+  threshold/config in one job; split when they differ (e.g. x86 vs Pi temps).
 - **Runbooks signal via exit code.** A check exits nonzero to mean "act". The
   engine stays dumb; put the logic in bash (curl + `jq` + compare → exit 0/1).
 - **`when.exit`** ∈ `nonzero` (default) | `zero` | `<int>`; optional

@@ -20,7 +20,7 @@ export type JobConfig = {
   name: string;          // display label (defaults to id)
   description?: string;
   schedule: string;      // 5-field cron
-  target: string;        // global server id "<group>/<server>"
+  targets: string[];     // one or more global server ids "<group>/<server>"
   run: string;           // runbook id executed each tick (the "check")
   when?: Trigger;        // when run's result means "remediate"
   then?: string;         // runbook id run when `when` matches
@@ -48,13 +48,22 @@ export type RunResult = {
   durationMs: number;
 };
 
-/** In-memory record of a job's most recent execution. No persistence. */
+/** Most recent execution of the job's runbooks against a single target. */
+export type TargetRunState = {
+  lastCheck?: RunResult;     // result of `run`
+  lastTriggered?: boolean;   // did `when` match?
+  lastAction?: RunResult;    // result of `then`, if it ran
+  lastError?: string;        // human summary of this target's last failure
+};
+
+/**
+ * In-memory record of a job's most recent execution. No persistence. The job
+ * fans out across `targets`, so per-target outcomes live in `targets` keyed by
+ * global server id; the top level only holds run-wide timing.
+ */
 export type JobRunState = {
   running: boolean;
   lastRunAt?: string;        // ISO timestamp
   lastDurationMs?: number;
-  lastCheck?: RunResult;     // result of `run`
-  lastTriggered?: boolean;   // did `when` match?
-  lastAction?: RunResult;    // result of `then`, if it ran
-  lastError?: string;        // human summary of the last failure, if any
+  targets: Record<string, TargetRunState>;
 };

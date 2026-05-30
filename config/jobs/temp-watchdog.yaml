@@ -1,0 +1,23 @@
+name: Temp watchdog
+description: Alert when any bare-metal host runs hot for 5+ minutes
+schedule: "*/2 * * * *"          # MUST be shorter than TEMP_SUSTAIN (300s)
+
+# `target` takes a list — one job fans out across every host each tick, with an
+# independent check + debounce + alert per host. The temp-check runbook reads
+# sysfs and no-ops on targets with no sensors (LXC/VM), so it's safe to add any
+# host here.
+target:
+  - bethany/proxmox              # x86 hypervisor
+  - pi-town/master               # k3s nodes (ARM, throttle ~80°C)
+  - pi-town/level-1
+  - pi-town/level-2
+
+run: temp-check                  # monitor-only: nonzero check (= ran hot) alerts
+
+params:
+  TEMP_THRESHOLD: "80"           # job-wide; one line for all hosts. Split into
+                                 # separate jobs if a host needs its own number.
+
+notify:
+  on: [error]
+  priority: high
