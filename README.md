@@ -1,18 +1,41 @@
-We're going to build a website to manage my home server as well as some side projects I run.
+# home-server-mgr
 
-The servers will all be accessed via ssh, with the option to connect with a username and password. 
+Web UI + API to SSH into my home and side-project servers and stream script
+("runbook") output live. Personal-infra scope — single user, internet-exposed
+behind a Cloudflare Tunnel and Discord OAuth.
 
+## What it does
 
-Fetch this design file, read its readme, and prepare to implement it. https://api.anthropic.com/v1/design/h/THo4RKINdxoEQ4XEcbk9LA?open_file=index.html
+- **Browse servers** defined in file-based config and open a live SSH terminal.
+- **Run runbooks** — checked-in bash scripts — against a server and stream their
+  output to the browser via WebSockets. Runbooks can declare typed inputs.
+- **Schedule recurring jobs** — cron-driven runbook runs with optional
+  conditional remediation and ntfy alerts.
 
-The first thing will be to make technical choices. I want a separate UI with an API backend. I will only be building this app with LLMs so I don't have a coding preference for either UI or API so choose the best fit particularly for backed changes to build APIs but more imrpotantly manage servers via ssh. \
+## Stack
 
-A key feature of the design is streaming the SSH sessions so make sure our technology choice supports streaming, e.g. signalr is not off the table. 
+- **API:** Fastify + ssh2 + WebSocket, TypeScript (ESM).
+- **UI:** React + Vite + xterm.js, with separate desktop and mobile shells.
+- **Config:** file-based only — no database. Clone the repo, drop in YAML/scripts,
+  and go.
 
-I think we'll go for a file-based config for the servers and we can drop in the scripts to a particular folder. This will be nice as I can check them in to GitHub. \
-\
-I'm not super keen on any persistence layer other than file based, as I can port this around just by cloning the repo
+## Layout
 
-Last thing, I'm a senior developer and do have an eye for detail. So even if you don't choose a language I'm familiar with, I will have opinions about folder structure. In this respect I like feature first folder structure, where folder names
-match the featyre name, instea dof being grouped by what they are (e.g. no Controllers/ folder, instead it'll be ServerManager/ApiController.cs etc)
+```
+api/            Fastify + ssh2 + WebSocket backend
+ui/             React + Vite + xterm.js frontend
+config/
+  servers/      one YAML file per server group
+  scripts/      one bash script per runbook
+  jobs/         one YAML file per recurring job
+dev/run.sh      starts both stacks with prefixed output
+```
 
+## Run
+
+```bash
+cp .env.example .env    # fill in Discord OAuth + secrets
+./dev/run.sh            # UI on :5780, API on :5781
+```
+
+See [CLAUDE.md](CLAUDE.md) for conventions, config formats, auth, and gotchas.

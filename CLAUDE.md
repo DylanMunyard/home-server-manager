@@ -305,6 +305,17 @@ quick checks.
   affects desktop only — mobile must be widened explicitly.
 - Mobile-only screens that aren't present on desktop: `RunningScreen`,
   `ShellScreen` (full-screen variants of the desktop terminal/shell modes).
+- **Detail views use native page scroll, not cramped inner scrollers.** When
+  metadata stacks up (params, server detail, a job's per-host list), the *whole*
+  view should scroll so the primary content (the script preview) renders at full
+  height — don't trap it in a short `max-height`/`overflow:auto` box squeezed
+  between fixed metadata and a pinned action bar/terminal. Make the screen
+  container the scroller and give the script natural height; scope it so siblings
+  that genuinely need a bounded box keep one (desktop terminal
+  `.stage > .terminal-wrap` holds ~46vh; the jobs-flow script box `.flow-book
+  .script` stays capped). Implemented as `.stage { overflow-y:auto }` +
+  `.stage > .script { max-height:none }` (desktop) and the `.m-jscroll` modifier
+  on the mobile job-detail body.
 
 ## What's intentionally out of scope (don't add without asking)
 

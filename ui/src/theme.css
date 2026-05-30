@@ -58,7 +58,13 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 }
 .rail-left  { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
 .rail-right { border-left:  1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
-.stage      { display: flex; flex-direction: column; min-height: 0; }
+/* The stage scrolls natively so metadata (params, server detail) + the full
+ * script + terminal stack at natural height instead of squeezing the script
+ * into a tiny inner scroller. The script's cap is lifted; the terminal keeps a
+ * sized box (grows to fill when content is short, holds ~46vh when it isn't). */
+.stage      { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+.stage > .script        { max-height: none; }
+.stage > .terminal-wrap { flex: 1 0 46vh; min-height: 320px; }
 
 .panel-h {
   display: flex; align-items: baseline; justify-content: space-between;
