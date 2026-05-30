@@ -1,4 +1,4 @@
-# home-server-mgr — agent instructions
+#   home-server-mgr — agent instructions
 
 Web UI + API to SSH into the user's home/side-project servers and stream script
 ("runbook") output live. Personal-infra scope — single user. Internet-exposed at
@@ -18,6 +18,7 @@ config/
   servers/*.yaml    one file per server group (see "Server YAML")
   scripts/*.sh      one file per runbook (see "Runbook scripts")
   jobs/*.yaml       one file per recurring job (see "Recurring jobs")
+  dashboard.yaml    live-metrics dashboard config (see "Live dashboard")
 dev/run.sh          starts both stacks with prefixed output (see "Verify")
 ```
 
@@ -183,6 +184,48 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   declare. Distinct from `env`: params are plain non-secret values (surfaced by
   `GET /api/jobs`) and map to declared inputs; `env` is for `${VAR}` secrets. On a
   name collision params win (injected after env).
+
+## Live dashboard — `config/dashboard.yaml`
+
+A "how are things right now" overview per node — CPU%, memory%, temp, disk —
+visualised with live sparkline charts (visx), grouped by node. API engine is
+`api/src/metrics/`; UI is `ui/src/metrics/` (the shared `Dashboard` component
+renders in both shells). Single optional config file with clone-and-go defaults.
+
+```yaml
+# config/dashboard.yaml — all fields optional
+interval: 5                 # seconds between samples
+mounts: [/]                 # df targets reported per node
+retention: 2h               # ring-buffer window (s/m/h or bare seconds)
+thresholds: { cpu: 90, mem: 90, disk: 85, temp: 80 }  # tile-colour only
+nodes: all                  # or a list of <group>/<server> ids
+```
+
+- **Zero-install probe.** `config/scripts/metrics-stream.sh` is a normal runbook
+  that *loops*, emitting one NDJSON sample per `METRICS_INTERVAL` from `/proc` +
+  `/sys` + `df` — no packages/sudo/TTY, same ethos as `temp-check`. CPU% is the
+  delta of `/proc/stat` over each interval; temp reuses the sysfs sweep (hottest
+  °C, `null` on sensor-less LXC/VM). It never exits on its own — SIGTERM on
+  teardown. Don't add a param expecting a one-shot run; it's a stream.
+- **Always-on, in-memory collector.** `metrics.collector.ts` starts at boot
+  (isolated from the fatal `listen` path like the job scheduler — **must never
+  take down the API**) and holds one `streamMetrics` SSH connection per watched
+  node, pushing samples into a **per-node ring buffer capped by `retention`**.
+  No persistence, no DB — a restart refills in seconds (clone-and-go). A dropped
+  stream marks the node `down` and reconnects on a backoff; a per-node failure
+  never affects the others or the API.
+- **Browsers read the buffer, never SSH.** `GET /api/metrics` is a snapshot for
+  first paint; `GET /ws/metrics` sends that snapshot then forwards live
+  `sample`/`status` events. Both are auth-gated by the global guard. The UI
+  (`useMetrics`) caps its own copy to the same window. One shared collector
+  feeds every tab/device — opening the dashboard doesn't open new connections.
+- **Charts are visx** (D3 scales/shapes as React primitives) styled to the
+  brutalist tokens — thin ink line, flat accent fill, monospace ticks, no
+  gradients/shadows. `MetricChart` has `spark` (tile) and `full` (axed detail)
+  variants. Threshold colours the line/bar red; **alerting still lives in jobs**
+  (a disk/temp watchdog), not here — thresholds are display-only.
+- **Mobile** gets a 4th tab (`dash`); the same `Dashboard` renders single-column
+  via `.m-app .dash` token remap + grid override. Detail uses native scroll.
 
 ## Secrets
 

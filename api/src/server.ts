@@ -10,6 +10,8 @@ import { sshRoutes } from './ssh/ssh.routes.js';
 import { jobsRoutes } from './jobs/jobs.routes.js';
 import { startScheduler } from './jobs/jobs.scheduler.js';
 import { alertsRoutes } from './alerts/alerts.routes.js';
+import { metricsRoutes } from './metrics/metrics.routes.js';
+import { startCollector } from './metrics/metrics.collector.js';
 
 const app = Fastify({ logger: true });
 
@@ -26,6 +28,7 @@ await app.register(runbooksRoutes);
 await app.register(sshRoutes);
 await app.register(jobsRoutes);
 await app.register(alertsRoutes);
+await app.register(metricsRoutes);
 
 app.get('/api/health', async () => ({ ok: true }));
 
@@ -44,4 +47,14 @@ try {
   await startScheduler();
 } catch (err) {
   app.log.error({ err }, 'job scheduler failed to start — API continuing without it');
+}
+
+// Start the always-on metrics collector. Like the scheduler it's auxiliary —
+// a bad dashboard config or unreachable node must never take down the API, so
+// it logs instead of exiting. loadDashboardConfig already falls back to
+// defaults, and per-node stream failures reconnect on a backoff.
+try {
+  await startCollector();
+} catch (err) {
+  app.log.error({ err }, 'metrics collector failed to start — API continuing without it');
 }

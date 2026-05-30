@@ -7,6 +7,7 @@ import { RunbookParams } from '../runbooks/RunbookParams.tsx';
 import { ScriptViewer } from '../runbooks/ScriptViewer.tsx';
 import { Terminal, type TerminalHandle } from '../terminal/Terminal.tsx';
 import { JobsView } from '../jobs/JobsView.tsx';
+import { Dashboard } from '../metrics/Dashboard.tsx';
 import { testAlert } from '../shared/api.ts';
 import { useGroups, useServerDetail } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
@@ -15,7 +16,7 @@ import { useSshStream } from '../terminal/useSshStream.ts';
 import { useShellStream } from '../terminal/useShellStream.ts';
 
 type Mode = 'runbook' | 'shell';
-type TopView = 'console' | 'jobs';
+type TopView = 'console' | 'jobs' | 'dashboard';
 
 const RUN_STATUS_LABEL: Record<string, string> = {
   idle:       'ready',
@@ -40,10 +41,13 @@ export function DesktopApp() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Top view = pathname. `/` and `/console` show the console; `/jobs` shows
-  // the jobs view. Anything else falls back to console so a bookmarked /m/...
-  // URL (mobile) doesn't render blank when the desktop layout takes over.
-  const topView: TopView = location.pathname.startsWith('/jobs') ? 'jobs' : 'console';
+  // Top view = pathname. `/` and `/console` show the console; `/jobs` the jobs
+  // view; `/dashboard` the live metrics. Anything else falls back to console so
+  // a bookmarked /m/... URL (mobile) doesn't render blank when the desktop
+  // layout takes over.
+  const topView: TopView = location.pathname.startsWith('/jobs') ? 'jobs'
+    : location.pathname.startsWith('/dashboard') ? 'dashboard'
+    : 'console';
 
   // Selections live in the query string so refresh + share + back-button work.
   const serverId = searchParams.get('server');
@@ -51,7 +55,9 @@ export function DesktopApp() {
   const mode: Mode = (searchParams.get('mode') as Mode) === 'shell' ? 'shell' : 'runbook';
 
   const setTopView = useCallback((v: TopView) => {
-    navigate(v === 'jobs' ? '/jobs' : { pathname: '/console', search: location.search });
+    if (v === 'jobs') navigate('/jobs');
+    else if (v === 'dashboard') navigate('/dashboard');
+    else navigate({ pathname: '/console', search: location.search });
   }, [navigate, location.search]);
 
   const updateParams = useCallback((patch: Record<string, string | null>) => {
@@ -145,13 +151,14 @@ export function DesktopApp() {
         <h1>home-lab</h1>
         <nav className="top-nav">
           <button data-active={topView === 'console'} onClick={() => setTopView('console')}>console</button>
+          <button data-active={topView === 'dashboard'} onClick={() => setTopView('dashboard')}>dashboard</button>
           <button data-active={topView === 'jobs'} onClick={() => setTopView('jobs')}>jobs</button>
         </nav>
         <span className="meta">{allServers.length} nodes · {groups.length} groups · {runbooks.length} runbooks</span>
         <a className="signout" href="/api/auth/logout">sign out</a>
       </header>
 
-      {topView === 'jobs' ? <JobsView /> : (
+      {topView === 'jobs' ? <JobsView /> : topView === 'dashboard' ? <Dashboard /> : (
       <div className="workspace">
         <ServerRail groups={groups} selectedId={serverId} onSelect={selectServer} />
 

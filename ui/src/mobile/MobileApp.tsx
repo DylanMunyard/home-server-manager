@@ -14,11 +14,13 @@ import { ShellScreen } from './ShellScreen.tsx';
 import { JobsScreen } from './JobsScreen.tsx';
 import { JobDetailScreen } from './JobDetailScreen.tsx';
 import { useJobs } from '../jobs/useJobs.ts';
+import { Dashboard } from '../metrics/Dashboard.tsx';
 
 const TARGET_KEY = 'm.targetId';
 
 // What tab does this URL belong to? Drives the bottom TabBar highlight.
 function tabFromPath(pathname: string): MobileTab {
+  if (pathname.startsWith('/m/dashboard')) return 'dashboard';
   if (pathname.startsWith('/m/servers')) return 'servers';
   if (pathname.startsWith('/m/jobs')) return 'jobs';
   return 'books';
@@ -79,6 +81,13 @@ export function MobileApp() {
         } />
         <Route path="/m/books/:bookId/run" element={
           <RunningRoute target={target} />
+        } />
+
+        {/* DASHBOARD */}
+        <Route path="/m/dashboard" element={
+          <Frame top={<TopBar signOut meta={`${allServers.length}N · live`} />}>
+            <Dashboard />
+          </Frame>
         } />
 
         {/* SERVERS */}

@@ -92,6 +92,36 @@ export type Job = {
   state: JobRunState;
 };
 
+// ── Live dashboard metrics ──────────────────────────────────────
+// Mirror of api/src/metrics/metrics.types.ts.
+export type DiskSample = { mount: string; used: number; total: number }; // GiB
+export type MetricSample = {
+  ts: number;                       // unix seconds
+  cpu: number;                      // %
+  ncpu: number;
+  load: [number, number, number];
+  mem: { used: number; total: number }; // MiB
+  temp: number | null;              // hottest °C, null if no sensors
+  disk: DiskSample[];
+};
+export type NodeStatus = 'connecting' | 'live' | 'down';
+export type NodeSnapshot = {
+  id: string;
+  name: string;
+  group: string;
+  host: string;
+  status: NodeStatus;
+  lastError?: string;
+  samples: MetricSample[];
+};
+export type Thresholds = { cpu: number; mem: number; disk: number; temp: number };
+export type DashboardMeta = { interval: number; retentionSec: number; thresholds: Thresholds };
+export type MetricsSnapshot = { meta: DashboardMeta; nodes: NodeSnapshot[] };
+export type MetricsEvent =
+  | { type: 'snapshot'; snapshot: MetricsSnapshot }
+  | { type: 'sample'; id: string; sample: MetricSample }
+  | { type: 'status'; id: string; status: NodeStatus; lastError?: string };
+
 // Wraps fetch so an expired/absent session (401) bounces to the OAuth start
 // route instead of surfacing as a generic load error. Same-origin requests
 // send the session cookie automatically.
@@ -145,6 +175,11 @@ async function apiPost(path: string, errorMsg: string): Promise<Response> {
 
 export async function fetchJobs(): Promise<Job[]> {
   const r = await apiGet('/api/jobs', 'failed to load jobs');
+  return r.json();
+}
+
+export async function fetchMetrics(): Promise<MetricsSnapshot> {
+  const r = await apiGet('/api/metrics', 'failed to load metrics');
   return r.json();
 }
 

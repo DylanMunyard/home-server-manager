@@ -1,0 +1,17 @@
+# Live dashboard — all fields optional (clone-and-go defaults shown).
+# The API collector samples each node continuously into an in-memory ring
+# buffer; the UI reads a snapshot + live stream. No persistence (see CLAUDE.md).
+
+interval: 5              # seconds between samples
+mounts: [/]             # disk mounts to report per node (df targets)
+retention: 2h           # how far back the ring buffer keeps samples (s/m/h)
+
+# Tile colour turns red past these (display only — alerting lives in jobs).
+thresholds:
+  cpu:  90              # %
+  mem:  90              # %
+  disk: 85              # %
+  temp: 80              # °C
+
+nodes: all              # "all" watches every configured server, or a list of
+                        # <group>/<server> ids, e.g. [bethany/proxmox, pi-town/pi1]
