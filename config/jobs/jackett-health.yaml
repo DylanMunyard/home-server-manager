@@ -1,0 +1,17 @@
+name: Jackett indexer health
+description: Test every configured Jackett indexer; surface unhealthy ones in the UI
+schedule: "17 * * * *"           # hourly — /test hits the real trackers, so don't
+                                 # hammer them; bump down only if you must.
+target: bethany/linux-isos       # the host running Jackett (adjust to yours)
+
+run: jackett-health              # monitor-only: nonzero (= an indexer failed)
+
+# No `notify:` block → this job never sends ntfy alerts. Check the result in the
+# jobs UI (the Last-run tab shows which indexers are down).
+
+env:
+  JACKETT_APIKEY: ${JACKETT_APIKEY}   # global Jackett key — put it in .env (root)
+
+# Jackett not on the default URL? Uncomment and set the non-secret base URL:
+# params:
+#   JACKETT_URL: "http://127.0.0.1:9117"
