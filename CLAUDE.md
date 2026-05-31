@@ -195,7 +195,7 @@ renders in both shells). Single optional config file with clone-and-go defaults.
 ```yaml
 # config/dashboard.yaml — all fields optional
 interval: 5                 # seconds between samples
-mounts: [/]                 # df targets reported per node
+mounts: auto                # 'auto' itemises every real FS; or pin [/, /mnt/data]
 retention: 2h               # ring-buffer window (s/m/h or bare seconds)
 thresholds: { cpu: 90, mem: 90, disk: 85, temp: 80 }  # tile-colour only
 nodes: all                  # or a list of <group>/<server> ids
@@ -205,8 +205,11 @@ nodes: all                  # or a list of <group>/<server> ids
   that *loops*, emitting one NDJSON sample per `METRICS_INTERVAL` from `/proc` +
   `/sys` + `df` — no packages/sudo/TTY, same ethos as `temp-check`. CPU% is the
   delta of `/proc/stat` over each interval; temp reuses the sysfs sweep (hottest
-  °C, `null` on sensor-less LXC/VM). It never exits on its own — SIGTERM on
-  teardown. Don't add a param expecting a one-shot run; it's a stream.
+  °C, `null` on sensor-less LXC/VM). Disk is **itemised per filesystem** from one
+  `df` pass with the same pseudo-FS exclusions as `disk-usage.sh` (so data
+  volumes show up next to `/`); `METRICS_MOUNTS=auto` reports all, an explicit
+  list pins specific mounts. It never exits on its own — SIGTERM on teardown.
+  Don't add a param expecting a one-shot run; it's a stream.
 - **Always-on, in-memory collector.** `metrics.collector.ts` starts at boot
   (isolated from the fatal `listen` path like the job scheduler — **must never
   take down the API**) and holds one `streamMetrics` SSH connection per watched

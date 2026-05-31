@@ -3,7 +3,9 @@
 # buffer; the UI reads a snapshot + live stream. No persistence (see CLAUDE.md).
 
 interval: 5              # seconds between samples
-mounts: [/]             # disk mounts to report per node (df targets)
+mounts: auto            # "auto" itemises every real filesystem (root + data
+                        # volumes), excluding pseudo-FS noise like disk-usage.sh.
+                        # Or pin specific mounts: [/, /mnt/data]
 retention: 2h           # how far back the ring buffer keeps samples (s/m/h)
 
 # Tile colour turns red past these (display only — alerting lives in jobs).

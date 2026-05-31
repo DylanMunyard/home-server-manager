@@ -10,7 +10,7 @@ const FILE = resolve(paths.configRoot, 'dashboard.yaml');
 const DEFAULT_THRESHOLDS: Thresholds = { cpu: 90, mem: 90, disk: 85, temp: 80 };
 const DEFAULTS = {
   interval: 5,
-  mounts: ['/'],
+  mounts: 'auto',
   retentionSec: 2 * 60 * 60,
   thresholds: DEFAULT_THRESHOLDS,
 };
@@ -20,7 +20,7 @@ export type DashboardNode = { id: string; name: string; group: string; host: str
 
 export type DashboardConfig = {
   interval: number;       // seconds between samples
-  mounts: string[];       // df targets passed to the probe
+  mounts: string;         // METRICS_MOUNTS value: 'auto' or a space-joined list
   retentionSec: number;   // ring-buffer window
   thresholds: Thresholds;
   nodes: DashboardNode[];  // resolved set of servers to watch
@@ -28,7 +28,7 @@ export type DashboardConfig = {
 
 type RawDashboard = {
   interval?: number;
-  mounts?: string[];
+  mounts?: 'auto' | string[];
   retention?: string | number;
   thresholds?: Partial<Thresholds>;
   nodes?: 'all' | string[];
@@ -84,7 +84,9 @@ export async function loadDashboardConfig(): Promise<DashboardConfig> {
 
   return {
     interval: typeof raw.interval === 'number' && raw.interval > 0 ? raw.interval : DEFAULTS.interval,
-    mounts: Array.isArray(raw.mounts) && raw.mounts.length > 0 ? raw.mounts.map(String) : DEFAULTS.mounts,
+    // 'auto' (or omitted) → probe discovers every real filesystem; an explicit
+    // list is space-joined into METRICS_MOUNTS to restrict to those mounts.
+    mounts: Array.isArray(raw.mounts) && raw.mounts.length > 0 ? raw.mounts.map(String).join(' ') : DEFAULTS.mounts,
     retentionSec: parseRetention(raw.retention),
     thresholds: { ...DEFAULT_THRESHOLDS, ...(raw.thresholds ?? {}) },
     nodes,

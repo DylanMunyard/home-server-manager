@@ -12,12 +12,12 @@
 #
 # params:
 #   METRICS_INTERVAL: { label: "Sample interval (seconds)", default: "5" }
-#   METRICS_MOUNTS:   { label: "Disk mounts (space-separated)", default: "/" }
+#   METRICS_MOUNTS:   { label: "Disk mounts ('auto' or space-separated list)", default: "auto" }
 
 set -euo pipefail
 
 interval="${METRICS_INTERVAL:-5}"
-read -r -a mounts <<< "${METRICS_MOUNTS:-/}"
+mounts_req="${METRICS_MOUNTS:-auto}"   # "auto" = every real FS; else explicit list
 ncpu="$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)"
 
 # /proc/stat aggregate → "<total_jiffies> <idle_jiffies>" (idle includes iowait)
@@ -44,23 +44,29 @@ hottest_temp() {
     return 0
 }
 
-# JSON array of {mount,used,total} in GiB for each requested mount.
+# JSON array of {mount,used,total} in GiB, one entry per filesystem. A single
+# df pass excludes the same noise pseudo-filesystems as disk-usage.sh
+# (tmpfs/devtmpfs/squashfs/overlay/efivarfs) so a host's real data volumes show
+# up itemised next to / instead of being collapsed to a single root figure.
+# mounts_req="auto" reports every surviving filesystem; an explicit
+# space-separated list (from METRICS_MOUNTS) restricts to those mount points.
 disk_json() {
-    local out="" first=1 m line total used gib
-    for m in "${mounts[@]}"; do
-        line="$(df -P -B1 "$m" 2>/dev/null | awk 'NR==2{ print $2, $3 }')" || continue
-        [ -z "$line" ] && continue
-        # shellcheck disable=SC2086
-        set -- $line
-        total="$1"; used="$2"
-        gib="$(awk -v t="$total" -v u="$used" 'BEGIN{ printf "%.1f %.1f", u/1073741824, t/1073741824 }')"
-        # shellcheck disable=SC2086
-        set -- $gib
-        [ "$first" = 1 ] || out+=","
-        first=0
-        out+="{\"mount\":\"$m\",\"used\":$1,\"total\":$2}"
-    done
-    printf '[%s]' "$out"
+    local filter=""
+    [ "$mounts_req" != "auto" ] && filter="$mounts_req"
+    df -P -B1 -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs 2>/dev/null | awk -v filter="$filter" '
+        BEGIN {
+            want_n = split(filter, a, " ");
+            for (i = 1; i <= want_n; i++) want[a[i]] = 1;
+            printf "[";
+        }
+        NR > 1 {
+            mount = $6;
+            if (want_n > 0 && !(mount in want)) next;
+            gib = 1073741824;
+            printf "%s{\"mount\":\"%s\",\"used\":%.1f,\"total\":%.1f}", (n++ ? "," : ""), mount, $3 / gib, $2 / gib;
+        }
+        END { printf "]"; }
+    '
 }
 
 read -r prev_total prev_idle < <(cpu_totals)

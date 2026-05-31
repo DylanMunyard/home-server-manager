@@ -106,7 +106,7 @@ export async function startCollector(): Promise<void> {
   }
   probeScript = exportPrelude({
     METRICS_INTERVAL: String(config.interval),
-    METRICS_MOUNTS: config.mounts.join(' '),
+    METRICS_MOUNTS: config.mounts,
   }) + probe.contents;
 
   const { servers } = await loadAll();
