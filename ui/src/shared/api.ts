@@ -40,6 +40,10 @@ export type RunbookSummary = {
   name: string;
   description: string;
   params: RunbookParam[];
+  // Set ⇒ a manual run must be confirmed first (the value is the prompt text).
+  // Marks a destructive/irreversible runbook. Jobs and feature integrations run
+  // the script directly and ignore this.
+  confirm?: string;
   filename: string;
 };
 
@@ -180,6 +184,39 @@ export async function fetchJobs(): Promise<Job[]> {
 
 export async function fetchMetrics(): Promise<MetricsSnapshot> {
   const r = await apiGet('/api/metrics', 'failed to load metrics');
+  return r.json();
+}
+
+// ── File browser ────────────────────────────────────────────────
+// Mirror of api/src/files/files.types.ts.
+export type FileKind = 'dir' | 'file' | 'other';
+export type FileEntry = {
+  name: string;
+  path: string;
+  type: FileKind;
+  size: number;     // bytes — recursive total for dirs, own size for files
+  mtime: number;    // unix seconds
+};
+// Streamed over /ws/files/list (mirror of api/src/files/files.types.ts).
+export type FilesEvent =
+  | { type: 'meta'; path: string; parent: string | null }
+  | { type: 'entry'; entry: FileEntry }
+  | { type: 'size'; path: string; size: number }
+  | { type: 'done' }
+  | { type: 'error'; message: string };
+
+// Delete a file/dir over SSH. Returns {ok,error?} for the success and guard/
+// failure cases alike so the caller can surface the actual reason.
+export async function deleteFile(server: string, path: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await fetch('/api/files/delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ server, path }),
+  });
+  if (r.status === 401) {
+    window.location.href = '/api/auth/login';
+    return new Promise(() => {});
+  }
   return r.json();
 }
 

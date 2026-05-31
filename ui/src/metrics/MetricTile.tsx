@@ -23,53 +23,59 @@ function Spark({ label, value, data, yMax, threshold }: {
   );
 }
 
-export function MetricTile({ node, thresholds, onExpand }: {
+export function MetricTile({ node, thresholds, onExpand, onBrowse }: {
   node: NodeSnapshot;
   thresholds: Thresholds;
   onExpand: (id: string) => void;
+  onBrowse: (id: string, mount: string) => void;
 }) {
   const last = latest(node);
   const memPct = last ? pct(last.mem.used, last.mem.total) : 0;
   const mounts = mountsOf(node);
 
+  // The tile is no longer a single button: the head + sparks expand to the node
+  // detail, while each disk bar is its own button that opens the file browser at
+  // that mount (nested buttons would be invalid HTML).
   return (
-    <button className="mtile" onClick={() => onExpand(node.id)} title="Open node detail">
-      <div className="mtile-head">
-        <div className="mtile-id">
-          <StatusDot status={node.status} />
-          <b>{node.name}</b>
+    <div className="mtile">
+      <button className="mtile-main" onClick={() => onExpand(node.id)} title="Open node detail">
+        <div className="mtile-head">
+          <div className="mtile-id">
+            <StatusDot status={node.status} />
+            <b>{node.name}</b>
+          </div>
+          <span className="mtile-host">{node.host}</span>
         </div>
-        <span className="mtile-host">{node.host}</span>
-      </div>
 
-      {node.status === 'down' && <div className="mtile-down">offline — {node.lastError ?? 'no data'}</div>}
+        {node.status === 'down' && <div className="mtile-down">offline — {node.lastError ?? 'no data'}</div>}
 
-      {!last && node.status !== 'down' && <div className="mtile-wait">waiting for first sample…</div>}
+        {!last && node.status !== 'down' && <div className="mtile-wait">waiting for first sample…</div>}
 
-      {last && (
-        <div className="mtile-sparks">
-          <Spark
-            label="cpu"
-            value={`${last.cpu.toFixed(0)}%`}
-            data={cpuSeries(node.samples)}
-            yMax={100}
-            threshold={thresholds.cpu}
-          />
-          <Spark
-            label="mem"
-            value={`${memPct.toFixed(0)}%`}
-            data={memSeries(node.samples)}
-            yMax={100}
-            threshold={thresholds.mem}
-          />
-          <Spark
-            label="temp"
-            value={last.temp === null ? '—' : `${last.temp}°`}
-            data={tempSeries(node.samples)}
-            threshold={thresholds.temp}
-          />
-        </div>
-      )}
+        {last && (
+          <div className="mtile-sparks">
+            <Spark
+              label="cpu"
+              value={`${last.cpu.toFixed(0)}%`}
+              data={cpuSeries(node.samples)}
+              yMax={100}
+              threshold={thresholds.cpu}
+            />
+            <Spark
+              label="mem"
+              value={`${memPct.toFixed(0)}%`}
+              data={memSeries(node.samples)}
+              yMax={100}
+              threshold={thresholds.mem}
+            />
+            <Spark
+              label="temp"
+              value={last.temp === null ? '—' : `${last.temp}°`}
+              data={tempSeries(node.samples)}
+              threshold={thresholds.temp}
+            />
+          </div>
+        )}
+      </button>
 
       {last && mounts.length > 0 && (
         <div className="mtile-disks">
@@ -77,7 +83,7 @@ export function MetricTile({ node, thresholds, onExpand }: {
             const d = last.disk.find((x) => x.mount === mt)!;
             const p = pct(d.used, d.total);
             return (
-              <div className="mbar-row" key={mt}>
+              <button className="mbar-row" key={mt} onClick={() => onBrowse(node.id, mt)} title={`Browse ${mt}`}>
                 <span className="mbar-label">{mt}</span>
                 <span className="mbar-track">
                   <span
@@ -87,11 +93,11 @@ export function MetricTile({ node, thresholds, onExpand }: {
                   />
                 </span>
                 <span className="mbar-val">{p.toFixed(0)}%</span>
-              </div>
+              </button>
             );
           })}
         </div>
       )}
-    </button>
+    </div>
   );
 }

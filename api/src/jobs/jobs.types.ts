@@ -1,4 +1,5 @@
 import type { NtfyPriority } from '../alerts/ntfy.js';
+import type { CollectResult } from '../ssh/ssh.collect.js';
 
 /** What a check's result has to look like for the job to take action. */
 export type Trigger = {
@@ -37,16 +38,8 @@ export type JobConfig = {
   params?: Record<string, string>;
 };
 
-/** Captured outcome of running one runbook over SSH. */
-export type RunResult = {
-  connected: boolean;        // did the SSH session reach exec?
-  stdout: string;
-  stderr: string;
-  exitCode: number | null;
-  signal?: string | null;
-  error?: string;            // SSH/connect-level error message, if any
-  durationMs: number;
-};
+/** Captured outcome of running one runbook over SSH (shared SSH collect shape). */
+export type RunResult = CollectResult;
 
 /** Most recent execution of the job's runbooks against a single target. */
 export type TargetRunState = {

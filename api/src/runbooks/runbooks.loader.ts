@@ -20,9 +20,19 @@ export type Runbook = {
   name: string;
   description: string;
   params: RunbookParam[];
+  /**
+   * If set, the UI requires explicit confirmation before a *manual* run (the
+   * value is the prompt message). Marks a destructive/irreversible runbook so a
+   * standalone run can't fire by accident. Only the manual run path honours it —
+   * jobs and feature integrations (e.g. the file browser's own delete confirm)
+   * run the script directly.
+   */
+  confirm?: string;
   filename: string;
   contents: string;
 };
+
+const DEFAULT_CONFIRM = 'This runbook requires confirmation before running. Continue?';
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -71,8 +81,8 @@ function extractDescription(id: string, contents: string): string {
     const m = /^\s*#\s?(.*)$/.exec(raw);
     if (!m) break;
     const body = m[1].trimEnd();
-    // The `# params:` block is not prose — once we reach it the description ends.
-    if (/^params:\s*$/.test(body)) break;
+    // The `# params:` / `# confirm:` directives aren't prose — stop here.
+    if (/^(params|confirm)\s*:/.test(body)) break;
     if (body === '') {
       flush();
       continue;
@@ -185,12 +195,41 @@ export function resolveParamValues(
   return out;
 }
 
+/**
+ * A top-level `# confirm:` directive in the header. `true` (or a bare `confirm:`)
+ * ⇒ the default prompt; a string ⇒ that custom prompt; `false`/absent ⇒ no
+ * confirmation. Lenient like the params parser — anything unexpected falls back
+ * to the default prompt (fail safe: a destructive script stays guarded).
+ */
+function parseConfirm(contents: string): string | undefined {
+  const lines = contents.split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  if (i < lines.length && lines[i].startsWith('#!')) i++;
+
+  for (; i < lines.length; i++) {
+    const m = /^\s*#\s?(.*)$/.exec(lines[i]);
+    if (!m) break; // first non-comment line ends the header region
+    const cm = /^confirm\s*:\s*(.*)$/.exec(m[1].trim());
+    if (!cm) continue;
+    const raw = cm[1].trim();
+    if (raw === '') return DEFAULT_CONFIRM;
+    let val: unknown;
+    try { val = YAML.parse(raw); } catch { return DEFAULT_CONFIRM; }
+    if (val === false || val == null) return undefined;
+    if (typeof val === 'string' && val) return val;
+    return DEFAULT_CONFIRM; // true, or any non-empty non-string
+  }
+  return undefined;
+}
+
 function parseRunbook(id: string, filename: string, contents: string): Runbook {
   return {
     id,
     name: id,
     description: extractDescription(id, contents),
     params: parseParams(id, contents),
+    confirm: parseConfirm(contents),
     filename,
     contents,
   };

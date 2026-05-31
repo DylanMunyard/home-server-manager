@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMetrics } from './useMetrics.ts';
 import { MetricTile } from './MetricTile.tsx';
 import { NodeDetail } from './NodeDetail.tsx';
+import { FileBrowser } from '../files/FileBrowser.tsx';
 import type { NodeSnapshot } from '../shared/api.ts';
 
 // The whole live dashboard — shared by both shells (desktop renders it in the
@@ -13,6 +14,7 @@ import type { NodeSnapshot } from '../shared/api.ts';
 export function Dashboard() {
   const { meta, nodes, connected } = useMetrics();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [browse, setBrowse] = useState<{ id: string; name: string; path: string } | null>(null);
 
   const groups = useMemo(() => {
     const by = new Map<string, NodeSnapshot[]>();
@@ -26,6 +28,24 @@ export function Dashboard() {
 
   const thresholds = meta?.thresholds ?? { cpu: 90, mem: 90, disk: 85, temp: 80 };
   const expandedNode = expanded ? nodes.find((n) => n.id === expanded) ?? null : null;
+
+  const openBrowse = (id: string, mount: string) => {
+    const node = nodes.find((n) => n.id === id);
+    setBrowse({ id, name: node?.name ?? id, path: mount });
+  };
+
+  if (browse) {
+    return (
+      <div className="dash">
+        <FileBrowser
+          server={browse.id}
+          serverName={browse.name}
+          initialPath={browse.path}
+          onClose={() => setBrowse(null)}
+        />
+      </div>
+    );
+  }
 
   if (expandedNode) {
     return (
@@ -58,7 +78,7 @@ export function Dashboard() {
           <h3 className="dash-group-h">{group}</h3>
           <div className="dash-grid">
             {gnodes.map((n) => (
-              <MetricTile key={n.id} node={n} thresholds={thresholds} onExpand={setExpanded} />
+              <MetricTile key={n.id} node={n} thresholds={thresholds} onExpand={setExpanded} onBrowse={openBrowse} />
             ))}
           </div>
         </section>
