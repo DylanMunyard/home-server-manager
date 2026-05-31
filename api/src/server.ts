@@ -12,6 +12,7 @@ import { startScheduler } from './jobs/jobs.scheduler.js';
 import { alertsRoutes } from './alerts/alerts.routes.js';
 import { metricsRoutes } from './metrics/metrics.routes.js';
 import { startCollector } from './metrics/metrics.collector.js';
+import { filesRoutes } from './files/files.routes.js';
 
 const app = Fastify({ logger: true });
 
@@ -29,6 +30,7 @@ await app.register(sshRoutes);
 await app.register(jobsRoutes);
 await app.register(alertsRoutes);
 await app.register(metricsRoutes);
+await app.register(filesRoutes);
 
 app.get('/api/health', async () => ({ ok: true }));
 

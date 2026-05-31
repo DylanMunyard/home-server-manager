@@ -1,9 +1,8 @@
 import { expandEnv } from '../config.js';
 import { loadServer } from '../servers/servers.loader.js';
 import { loadRunbook, resolveParamValues, type Runbook } from '../runbooks/runbooks.loader.js';
-import { runScript } from '../ssh/ssh.session.js';
+import { collectScript } from '../ssh/ssh.collect.js';
 import { exportPrelude } from '../ssh/prelude.js';
-import type { ServerConfig } from '../servers/servers.types.js';
 import { sendAlert } from '../alerts/ntfy.js';
 import type { JobConfig, JobRunState, RunResult, TargetRunState, Trigger } from './jobs.types.js';
 
@@ -45,33 +44,6 @@ function envPrelude(env: Record<string, string> | undefined): string {
  */
 function runbookPrelude(runbook: Runbook, job: JobConfig): string {
   return envPrelude(job.env) + exportPrelude(resolveParamValues(runbook.params, job.params ?? {}));
-}
-
-/** Run one runbook over SSH, buffering output into a single RunResult. */
-function runRunbookOnce(server: ServerConfig, contents: string): Promise<RunResult> {
-  const start = Date.now();
-  return new Promise((resolve) => {
-    let connected = false;
-    let stdout = '';
-    let stderr = '';
-    let exitCode: number | null = null;
-    let signal: string | null | undefined;
-    let error: string | undefined;
-
-    const handle = runScript(server, contents, (e) => {
-      switch (e.type) {
-        case 'connect': connected = true; break;
-        case 'stdout':  stdout += e.data; break;
-        case 'stderr':  stderr += e.data; break;
-        case 'exit':    exitCode = e.code; signal = e.signal; break;
-        case 'error':   error = e.message; break;
-      }
-    });
-
-    handle.done.then(() => {
-      resolve({ connected, stdout, stderr, exitCode, signal, error, durationMs: Date.now() - start });
-    });
-  });
 }
 
 /** Did the check's result match the trigger? `when.exit` defaults to 'nonzero'. */
@@ -126,7 +98,7 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
 
     // Resolving `env` throws here if a ${VAR} is unset, which the catch turns
     // into this target's lastError (no process crash, siblings unaffected).
-    const check = await runRunbookOnce(server, runbookPrelude(checkRunbook, job) + checkRunbook.contents);
+    const check = await collectScript(server, runbookPrelude(checkRunbook, job) + checkRunbook.contents);
     ts.lastCheck = check;
 
     const triggered = job.when ? triggerMatches(job.when, check) : false;
@@ -140,7 +112,7 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
     if (triggered && job.then) {
       const actionRunbook = await loadRunbook(job.then);
       if (!actionRunbook) throw new Error(`unknown then runbook '${job.then}'`);
-      action = await runRunbookOnce(server, runbookPrelude(actionRunbook, job) + actionRunbook.contents);
+      action = await collectScript(server, runbookPrelude(actionRunbook, job) + actionRunbook.contents);
       ts.lastAction = action;
     }
 

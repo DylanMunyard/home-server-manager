@@ -641,13 +641,17 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .dash-group-h { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-2); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
 
-/* Tile (a <button> — reset the global invert-on-hover) */
+/* Tile (a <div>: head+sparks expand the node, disk bars open the browser —
+ * separate buttons so nested-button HTML stays valid). */
 .mtile {
-  display: block; width: 100%; text-align: left; cursor: pointer;
   background: var(--bg); border: 1px solid var(--line); border-radius: 0;
   padding: 12px 14px 14px;
 }
-.mtile:hover { background: var(--bg-2); color: inherit; }
+.mtile-main {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: transparent; border: 0; border-radius: 0; padding: 0; color: inherit;
+}
+.mtile-main:hover { background: transparent; color: inherit; }
 .mtile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .mtile-id { display: flex; align-items: center; gap: 8px; }
 .mtile-id b { font-size: 14px; }
@@ -669,12 +673,78 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .mchart { line-height: 0; }
 
 .mtile-disks { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
-.mbar-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 11px; }
+/* Each disk bar is a button → opens the file browser at that mount. */
+.mbar-row {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px;
+  font-size: 11px; width: 100%; text-align: left; cursor: pointer;
+  background: transparent; border: 0; border-radius: 0; padding: 2px 0; color: inherit;
+}
+.mbar-row:hover { background: transparent; color: inherit; }
+.mbar-row:hover .mbar-label { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
 .mbar-label { color: var(--ink-3); }
 .mbar-track { height: 8px; background: var(--bg-2); border: 1px solid var(--line-soft); }
 .mbar-fill { display: block; height: 100%; background: var(--accent); }
 .mbar-fill[data-over="true"] { background: var(--err); }
 .mbar-val { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+/* ── File browser (drill into a disk's usage) ───────────────────── */
+.fbrowser { display: flex; flex-direction: column; }
+.fb-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.fb-back { padding: 5px 10px; font-size: 12px; flex: 0 0 auto; }
+.fb-id { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.fb-id b { font-size: 15px; }
+.fb-crumbs { display: flex; align-items: center; flex-wrap: wrap; font-size: 12px; font-variant-numeric: tabular-nums; }
+.fb-crumb-seg { display: inline-flex; align-items: center; }
+.fb-crumb { padding: 2px 5px; font-size: 12px; background: transparent; border: 0; color: var(--ink-2); cursor: pointer; }
+.fb-crumb:hover { background: var(--ink); color: var(--bg); }
+.fb-crumb[data-current="true"] { color: var(--ink); font-weight: 700; }
+.fb-crumb-sep { color: var(--ink-3); }
+
+.fb-sort { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.fb-sortbtn { padding: 4px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+.fb-sortbtn[data-on="true"] { background: var(--ink); color: var(--bg); }
+.fb-cancel { padding: 4px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; border-color: var(--line); }
+.fb-cancel:hover { background: var(--err); color: var(--bg); border-color: var(--err); }
+.fb-total { margin-left: auto; font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.fb-msg { padding: 14px 0; color: var(--ink-3); font-size: 12px; }
+.fb-msg-err { color: var(--err); }
+
+.fb-list { display: flex; flex-direction: column; }
+.fb-row { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line-soft); }
+.fb-row-up { cursor: pointer; background: transparent; border: 0; border-bottom: 1px solid var(--line-soft); width: 100%; text-align: left; padding: 8px 6px; color: var(--ink-3); }
+.fb-row-up:hover { background: var(--bg-2); color: var(--ink); }
+.fb-row-main {
+  flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 120px 88px 70px; align-items: center; gap: 12px;
+  background: transparent; border: 0; border-radius: 0; text-align: left; padding: 8px 6px; color: inherit; cursor: default;
+}
+.fb-row[data-type="dir"] .fb-row-main { cursor: pointer; }
+.fb-row[data-type="dir"] .fb-name { font-weight: 700; }
+.fb-row-main:hover { background: transparent; color: inherit; }
+.fb-row:hover { background: var(--bg-2); }
+.fb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-bar-track { height: 7px; background: var(--bg-2); border: 1px solid var(--line-soft); }
+.fb-bar-fill { display: block; height: 100%; background: var(--accent); }
+.fb-size { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); }
+.fb-size[data-dim="true"] { color: var(--ink-3); }
+.fb-age { font-size: 11px; color: var(--ink-3); text-align: right; }
+.fb-del { flex: 0 0 auto; padding: 4px 9px; font-size: 12px; color: var(--ink-3); background: transparent; border: 1px solid var(--line-soft); }
+.fb-del:hover { background: var(--err); color: var(--bg); border-color: var(--err); }
+
+/* Confirm-delete modal */
+.fb-modal-back { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: grid; place-items: center; z-index: 50; }
+.fb-modal { background: var(--bg); border: 1.5px solid var(--ink); padding: 20px 22px; max-width: 460px; width: calc(100% - 40px); }
+.fb-modal-h { font-size: 13px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--err); margin-bottom: 12px; }
+.fb-modal-path { display: block; word-break: break-all; background: var(--bg-2); padding: 8px 10px; font-size: 13px; }
+.fb-modal-meta { margin-top: 8px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fb-modal-warn { margin: 12px 0 0; font-size: 12px; color: var(--ink-2); }
+.fb-modal-warn code { background: var(--bg-2); padding: 1px 5px; }
+.fb-modal-err { margin-top: 10px; font-size: 12px; color: var(--err); }
+.fb-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.fb-btn { padding: 7px 16px; font-size: 12px; }
+.fb-btn-danger { background: var(--err); color: var(--bg); border-color: var(--err); }
+.fb-btn-danger:hover { background: var(--ink); color: var(--err); border-color: var(--ink); }
+.fb-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* Expanded node detail */
 .nodedetail { display: flex; flex-direction: column; }
@@ -691,8 +761,30 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .ndchart-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-2); }
 .ndchart-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* ── Confirm dialog (shared; manual-run guard for `confirm:` runbooks) ── */
+.confirm-back { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: grid; place-items: center; z-index: 60; }
+.confirm-box { background: var(--bg); border: 1.5px solid var(--ink); padding: 20px 22px; max-width: 440px; width: calc(100% - 40px); }
+.confirm-h { font-size: 13px; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 12px; }
+.confirm-h[data-danger="true"] { color: var(--err); }
+.confirm-msg { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.confirm-btn { padding: 7px 16px; font-size: 12px; }
+.confirm-go:hover { background: var(--accent); color: var(--ink); }
+.confirm-danger { background: var(--err); color: var(--bg); border-color: var(--err); }
+.confirm-danger:hover { background: var(--ink); color: var(--err); border-color: var(--ink); }
+
+/* Destructive marker on a runbook in the list + run header */
+.rb-danger, .m-danger-tag { color: var(--err); }
+
+/* Mobile palette remap (same trick as .m-app .dash): one component, two skins */
+.m-app .confirm-back { --ink: var(--m-ink); --ink-2: var(--m-ink-2); --ink-3: var(--m-ink-3); --line: var(--m-line); --line-soft: var(--m-line-soft); --err: var(--m-err); --accent: var(--m-hl); --bg: var(--m-paper); --bg-2: var(--m-paper-2); }
+
 /* Mobile: single-column grids + remap tokens to the cream palette */
 .m-app .dash { --ink: var(--m-ink); --ink-2: var(--m-ink-2); --ink-3: var(--m-ink-3); --line: var(--m-line); --line-soft: var(--m-line-soft); --err: var(--m-err); --ok: var(--m-ok); --bg: var(--m-paper); --bg-2: var(--m-paper-2); }
 .m-app .dash-grid { grid-template-columns: 1fr; }
 .m-app .nodedetail-charts { grid-template-columns: 1fr; }
+/* File browser inherits the cream palette from .m-app .dash; tighten the row
+ * grid for narrow screens (hide the %-bar + age, keep name + size). */
+.m-app .fb-row-main { grid-template-columns: 1fr auto; gap: 10px; }
+.m-app .fb-bar-track, .m-app .fb-age { display: none; }
 .m-jntfy .nf.pri { border-style: solid; border-color: var(--m-line); background: var(--m-paper-2); }

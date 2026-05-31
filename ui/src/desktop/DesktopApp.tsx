@@ -8,6 +8,7 @@ import { ScriptViewer } from '../runbooks/ScriptViewer.tsx';
 import { Terminal, type TerminalHandle } from '../terminal/Terminal.tsx';
 import { JobsView } from '../jobs/JobsView.tsx';
 import { Dashboard } from '../metrics/Dashboard.tsx';
+import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
 import { testAlert } from '../shared/api.ts';
 import { useGroups, useServerDetail } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
@@ -73,6 +74,7 @@ export function DesktopApp() {
 
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [alertBusy, setAlertBusy] = useState(false);
+  const [confirmRun, setConfirmRun] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const { detail: serverDetail, loading: detailLoading, error: detailError } = useServerDetail(serverId, reloadKey);
   const runbook = useRunbook(runbookId);
@@ -137,6 +139,17 @@ export function DesktopApp() {
     if (mode === 'shell' && shellState === 'connected') sendResize(size.cols, size.rows);
   }, [mode, shellState, sendResize]);
 
+  const doRun = useCallback(() => {
+    if (serverId && runbookId) run(serverId, runbookId, paramValues);
+  }, [serverId, runbookId, paramValues, run]);
+
+  // Manual-run guard: a runbook flagged `confirm:` opens the dialog first;
+  // everything else runs immediately.
+  const startRun = useCallback(() => {
+    if (runbook?.confirm) setConfirmRun(true);
+    else doRun();
+  }, [runbook, doRun]);
+
   const sendTestAlert = useCallback(async () => {
     setAlertBusy(true);
     setAlertMsg(null);
@@ -188,7 +201,7 @@ export function DesktopApp() {
                 <button
                   data-variant="run"
                   disabled={!canRun}
-                  onClick={() => { if (serverId && runbookId) run(serverId, runbookId, paramValues); }}
+                  onClick={startRun}
                 >
                   Run
                 </button>
@@ -236,6 +249,17 @@ export function DesktopApp() {
 
         <RunbookList runbooks={runbooks} selectedId={runbookId} onSelect={(id) => updateParams({ runbook: id })} />
       </div>
+      )}
+
+      {confirmRun && runbook?.confirm && (
+        <ConfirmDialog
+          title={`Run ${runbook.name}?`}
+          message={runbook.confirm}
+          confirmLabel="Run anyway"
+          danger
+          onCancel={() => setConfirmRun(false)}
+          onConfirm={() => { setConfirmRun(false); doRun(); }}
+        />
       )}
     </div>
   );

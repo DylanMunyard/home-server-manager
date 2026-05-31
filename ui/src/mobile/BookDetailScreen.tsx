@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { testAlert, type Runbook, type RunbookParam, type ServerSummary } from '../shared/api.ts';
+import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
 
 type Tab = 'script' | 'props';
 
@@ -19,7 +20,11 @@ export function BookDetailScreen({ runbook, target, params, values, onParamChang
   const [tab, setTab] = useState<Tab>(params.length > 0 ? 'props' : 'script');
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [confirmRun, setConfirmRun] = useState(false);
   if (!runbook) return <div className="m-empty">loading…</div>;
+
+  // A runbook flagged `confirm:` prompts before the standalone run.
+  const onRunClick = () => { if (runbook.confirm) setConfirmRun(true); else onRun(); };
 
   const sendTestAlert = async () => {
     setAlertBusy(true);
@@ -65,11 +70,22 @@ export function BookDetailScreen({ runbook, target, params, values, onParamChang
         <button
           className="m-run-btn"
           disabled={!canRun}
-          onClick={onRun}
+          onClick={onRunClick}
         >
           RUN ▸
         </button>
       </div>
+
+      {confirmRun && runbook.confirm && (
+        <ConfirmDialog
+          title={`Run ${runbook.name}?`}
+          message={runbook.confirm}
+          confirmLabel="Run anyway"
+          danger
+          onCancel={() => setConfirmRun(false)}
+          onConfirm={() => { setConfirmRun(false); onRun(); }}
+        />
+      )}
     </>
   );
 }
