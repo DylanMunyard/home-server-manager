@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { testAlert, type Job, type Runbook } from '../shared/api.ts';
 import { condText, humanizeCron, summarizeJobRun, summarizeTarget, uiState } from '../jobs/cron.ts';
+import { JobOutput } from '../jobs/JobOutput.tsx';
 
 type Props = {
   job: Job;
@@ -25,6 +26,7 @@ function Peek({ runbook }: { runbook: Runbook | null }) {
 export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, onRun }: Props) {
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [tab, setTab] = useState<'output' | 'flow'>('output');
   const sendTestAlert = async () => {
     setAlertBusy(true);
     setAlertMsg(null);
@@ -92,6 +94,12 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
       </div>
 
       <div className="m-content">
+        <div className="m-jtabs">
+          <button className={`m-jtab ${tab === 'output' ? 'on' : ''}`} onClick={() => setTab('output')}>Last run</button>
+          <button className={`m-jtab ${tab === 'flow' ? 'on' : ''}`} onClick={() => setTab('flow')}>Flow</button>
+        </div>
+        {tab === 'output' && <JobOutput job={job} />}
+        {tab === 'flow' && (
         <div className="m-jflow">
           {/* CHECK */}
           <div className="m-jstep">
@@ -146,6 +154,7 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
             </div>
           )}
         </div>
+        )}
       </div>
 
       <div className="m-actionbar two">

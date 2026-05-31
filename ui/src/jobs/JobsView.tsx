@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useJobs } from './useJobs.ts';
 import { useRunbook } from '../runbooks/useRunbooks.ts';
 import { JobFlow } from './JobFlow.tsx';
+import { JobOutput } from './JobOutput.tsx';
 import { humanizeCron, summarizeJobRun, summarizeTarget, uiState } from './cron.ts';
 import { testAlert, type Job } from '../shared/api.ts';
 
@@ -38,6 +39,7 @@ export function JobsView() {
   const setSelId = (id: string) => setParams((p) => { const n = new URLSearchParams(p); n.set('job', id); return n; });
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [tab, setTab] = useState<'output' | 'flow'>('output');
   const job = useMemo(() => jobs.find((j) => j.id === selId) ?? jobs[0] ?? null, [jobs, selId]);
 
   const sendTestAlert = async () => {
@@ -149,8 +151,15 @@ export function JobsView() {
             </div>
 
             <div className="job-flow-wrap">
-              <div className="panel-h"><span>Flow</span></div>
-              <JobFlow job={job} checkRunbook={checkRunbook} remediateRunbook={remediateRunbook} />
+              <div className="panel-h job-tabhead">
+                <div className="tabrow">
+                  <button className={`tab ${tab === 'output' ? 'active' : ''}`} onClick={() => setTab('output')}>Last run</button>
+                  <button className={`tab ${tab === 'flow' ? 'active' : ''}`} onClick={() => setTab('flow')}>Flow</button>
+                </div>
+              </div>
+              {tab === 'output'
+                ? <JobOutput job={job} />
+                : <JobFlow job={job} checkRunbook={checkRunbook} remediateRunbook={remediateRunbook} />}
             </div>
           </>
         )}
