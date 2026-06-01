@@ -18,6 +18,7 @@ type RawJob = {
   notify?: { on?: unknown; priority?: unknown };
   env?: unknown;
   params?: unknown;
+  investigate?: unknown;
 };
 
 const NOTIFY_EVENTS: NotifyEvent[] = ['action', 'error'];
@@ -132,6 +133,17 @@ function buildJob(
     throw new Error(`${ctx}: 'then' requires a 'when' condition`);
   }
 
+  // `investigate` is a boolean OR a string. A non-empty string both enables the
+  // investigation and becomes its intent hint (a familiar YAML shape — no new
+  // sigil); a boolean just toggles it with no hint.
+  if (raw.investigate !== undefined && typeof raw.investigate !== 'boolean' && typeof raw.investigate !== 'string') {
+    throw new Error(`${ctx}: investigate must be true/false or a string hint`);
+  }
+  const investigateHint = typeof raw.investigate === 'string' && raw.investigate.trim() !== ''
+    ? raw.investigate.trim()
+    : undefined;
+  const investigate = raw.investigate === true || investigateHint !== undefined;
+
   return {
     id,
     name: raw.name ?? id,
@@ -144,6 +156,8 @@ function buildJob(
     notify: parseNotify(raw.notify, ctx),
     env: parseEnv(raw.env, ctx),
     params: parseJobParams(raw.params, ctx),
+    investigate,
+    investigateHint,
   };
 }
 

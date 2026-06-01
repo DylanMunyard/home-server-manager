@@ -21,3 +21,13 @@ params:
 notify:
   on: [error]
   priority: high
+
+# When a host runs hot, kick off an AI investigation of that box — an agentic
+# loop of read-only SSH probes. `investigate:` can be `true`, or (as here) a
+# free-text intent that steers the probe loop. No-op if Azure OpenAI isn't
+# configured. See api/src/ai/ai.investigate.ts.
+investigate: >
+  Correlate the sustained high temperature with what was actually running on the
+  box at the time — identify the process(es) or workload (e.g. a transcode,
+  build, backup, or runaway process) driving CPU and thermals, and whether the
+  CPU was thermally throttling.

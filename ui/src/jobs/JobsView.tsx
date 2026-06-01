@@ -4,6 +4,8 @@ import { useJobs } from './useJobs.ts';
 import { useRunbook } from '../runbooks/useRunbooks.ts';
 import { JobFlow } from './JobFlow.tsx';
 import { JobOutput } from './JobOutput.tsx';
+import { JobInvestigations } from './Investigation.tsx';
+import { useAiStatus } from './useAiStatus.ts';
 import { humanizeCron, summarizeJobRun, summarizeTarget, uiState } from './cron.ts';
 import { testAlert, type Job } from '../shared/api.ts';
 
@@ -34,12 +36,13 @@ function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: ()
 
 export function JobsView() {
   const { jobs, error, run, runningId } = useJobs();
+  const aiEnabled = !!useAiStatus()?.enabled;
   const [params, setParams] = useSearchParams();
   const selId = params.get('job');
   const setSelId = (id: string) => setParams((p) => { const n = new URLSearchParams(p); n.set('job', id); return n; });
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<'output' | 'flow'>('output');
+  const [tab, setTab] = useState<'output' | 'flow' | 'investigation'>('output');
   const job = useMemo(() => jobs.find((j) => j.id === selId) ?? jobs[0] ?? null, [jobs, selId]);
 
   const sendTestAlert = async () => {
@@ -58,6 +61,10 @@ export function JobsView() {
 
   const state = job ? uiState(job.state.running) : 'armed';
   const isRunning = !!job && (job.state.running || runningId === job.id);
+  // The investigation tab is available when AI is configured (test any job) or
+  // the job opts into auto-firing. Don't strand it when neither holds.
+  const showInvestigation = aiEnabled || !!job?.investigate;
+  const activeTab = tab === 'investigation' && !showInvestigation ? 'output' : tab;
 
   return (
     <div className="jobs-view">
@@ -155,11 +162,19 @@ export function JobsView() {
                 <div className="tabrow">
                   <button className={`tab ${tab === 'output' ? 'active' : ''}`} onClick={() => setTab('output')}>Last run</button>
                   <button className={`tab ${tab === 'flow' ? 'active' : ''}`} onClick={() => setTab('flow')}>Flow</button>
+                  {showInvestigation && (() => {
+                    const hasInv = Object.values(job.state.targets).some((t) => t.investigation);
+                    return (
+                      <button className={`tab ${activeTab === 'investigation' ? 'active' : ''}`} onClick={() => setTab('investigation')}>
+                        AI investigation{hasInv && <span className="tab-badge">●</span>}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
-              {tab === 'output'
-                ? <JobOutput job={job} />
-                : <JobFlow job={job} checkRunbook={checkRunbook} remediateRunbook={remediateRunbook} />}
+              {activeTab === 'output' && <JobOutput job={job} />}
+              {activeTab === 'flow' && <JobFlow job={job} checkRunbook={checkRunbook} remediateRunbook={remediateRunbook} />}
+              {activeTab === 'investigation' && <JobInvestigations job={job} aiEnabled={aiEnabled} />}
             </div>
           </>
         )}

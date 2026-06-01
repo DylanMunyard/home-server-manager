@@ -4,6 +4,8 @@ import { loadRunbook, resolveParamValues, type Runbook } from '../runbooks/runbo
 import { collectScript } from '../ssh/ssh.collect.js';
 import { exportPrelude } from '../ssh/prelude.js';
 import { sendAlert } from '../alerts/ntfy.js';
+import { loadAiConfig } from '../ai/ai.config.js';
+import { startInvestigation } from '../ai/ai.investigate.js';
 import type { JobConfig, JobRunState, RunResult, TargetRunState, Trigger } from './jobs.types.js';
 
 // In-memory job state. Lost on restart by design — the scheduler just starts
@@ -130,34 +132,67 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
       });
     }
 
-    // `error` event — the effective work runbook failed.
-    if (events.has('error')) {
-      if (action && failed(action)) {
-        ts.lastError = `then '${job.then}' failed: ${failureSummary(action)}`;
+    // The effective work failure (independent of notify config) — the runbook
+    // whose failure counts as an `error`, with a human reason + alert title.
+    // `then` if it ran and failed; else the check when the job has no `when`
+    // (the check IS the work); else an SSH-level error on the check (a check
+    // WITH a `when` exiting nonzero is a trigger signal, not a failure).
+    let workFailure: { runbookId: string; result: RunResult; reason: string; title: string } | undefined;
+    if (action && failed(action)) {
+      workFailure = {
+        runbookId: job.then!,
+        result: action,
+        reason: `then '${job.then}' failed: ${failureSummary(action)}`,
+        title: `${job.name}: ${job.then} FAILED on ${target}`,
+      };
+    } else if (!job.when && failed(check)) {
+      workFailure = {
+        runbookId: job.run,
+        result: check,
+        reason: `run '${job.run}' failed: ${failureSummary(check)}`,
+        title: `${job.name}: ${job.run} FAILED on ${target}`,
+      };
+    } else if (check.error) {
+      workFailure = {
+        runbookId: job.run,
+        result: check,
+        reason: `run '${job.run}' could not execute: ${check.error}`,
+        title: `${job.name}: ${job.run} could not run on ${target}`,
+      };
+    }
+
+    if (workFailure) {
+      ts.lastError = workFailure.reason;
+
+      // `error` event — push the immediate failure alert.
+      if (events.has('error')) {
         await sendAlert({
-          title: `${job.name}: ${job.then} FAILED on ${target}`,
-          body: alertBody(target, job.then!, action),
+          title: workFailure.title,
+          body: alertBody(target, workFailure.runbookId, workFailure.result),
           priority: priority ?? 'high',
           tags: ['rotating_light'],
         });
-      } else if (!job.when && failed(check)) {
-        // Plain scheduled job: the check is the work, so its failure is an error.
-        ts.lastError = `run '${job.run}' failed: ${failureSummary(check)}`;
-        await sendAlert({
-          title: `${job.name}: ${job.run} FAILED on ${target}`,
-          body: alertBody(target, job.run, check),
-          priority: priority ?? 'high',
-          tags: ['rotating_light'],
-        });
-      } else if (check.error) {
-        // Even a check (with a `when`) can hit an SSH-level error — that's not
-        // a trigger signal, it's a genuine failure worth surfacing.
-        ts.lastError = `run '${job.run}' could not execute: ${check.error}`;
-        await sendAlert({
-          title: `${job.name}: ${job.run} could not run on ${target}`,
-          body: alertBody(target, job.run, check),
-          priority: priority ?? 'high',
-          tags: ['rotating_light'],
+      }
+
+      // Opt-in AI investigation. Fire-and-forget (it pushes its own follow-up
+      // ntfy when done) and decoupled from the alert above so investigation
+      // latency never delays it. Skipped silently when AI isn't configured.
+      if (job.investigate && loadAiConfig().enabled) {
+        const wfRunbook = workFailure.runbookId === job.run
+          ? checkRunbook
+          : await loadRunbook(workFailure.runbookId);
+        startInvestigation({
+          jobId: job.id,
+          jobName: job.name,
+          jobDescription: job.description,
+          target,
+          runbookId: workFailure.runbookId,
+          runbookDescription: wfRunbook?.description,
+          runbookContents: wfRunbook?.contents ?? '',
+          result: workFailure.result,
+          triggerReason: workFailure.reason,
+          hint: job.investigateHint,
+          notifyPriority: priority,
         });
       }
     }

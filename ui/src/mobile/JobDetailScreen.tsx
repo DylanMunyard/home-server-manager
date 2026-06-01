@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { testAlert, type Job, type Runbook } from '../shared/api.ts';
 import { condText, humanizeCron, summarizeJobRun, summarizeTarget, uiState } from '../jobs/cron.ts';
 import { JobOutput } from '../jobs/JobOutput.tsx';
+import { JobInvestigations } from '../jobs/Investigation.tsx';
+import { useAiStatus } from '../jobs/useAiStatus.ts';
 
 type Props = {
   job: Job;
@@ -26,7 +28,7 @@ function Peek({ runbook }: { runbook: Runbook | null }) {
 export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, onRun }: Props) {
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<'output' | 'flow'>('output');
+  const [tab, setTab] = useState<'output' | 'flow' | 'investigation'>('output');
   const sendTestAlert = async () => {
     setAlertBusy(true);
     setAlertMsg(null);
@@ -37,6 +39,9 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
     setAlertMsg(r.sent ? 'SENT ✓' : 'FAILED');
   };
   const state = uiState(job.state.running);
+  const aiEnabled = !!useAiStatus()?.enabled;
+  const showInvestigation = aiEnabled || !!job.investigate;
+  const activeTab = tab === 'investigation' && !showInvestigation ? 'output' : tab;
   const { human } = humanizeCron(job.schedule);
   const notifyOn = job.notify?.on ?? [];
   const single = job.targets.length === 1;
@@ -95,11 +100,17 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
 
       <div className="m-content">
         <div className="m-jtabs">
-          <button className={`m-jtab ${tab === 'output' ? 'on' : ''}`} onClick={() => setTab('output')}>Last run</button>
-          <button className={`m-jtab ${tab === 'flow' ? 'on' : ''}`} onClick={() => setTab('flow')}>Flow</button>
+          <button className={`m-jtab ${activeTab === 'output' ? 'on' : ''}`} onClick={() => setTab('output')}>Last run</button>
+          <button className={`m-jtab ${activeTab === 'flow' ? 'on' : ''}`} onClick={() => setTab('flow')}>Flow</button>
+          {showInvestigation && (
+            <button className={`m-jtab ${activeTab === 'investigation' ? 'on' : ''}`} onClick={() => setTab('investigation')}>
+              AI{Object.values(job.state.targets).some((t) => t.investigation) && <span className="m-jtab-badge">●</span>}
+            </button>
+          )}
         </div>
-        {tab === 'output' && <JobOutput job={job} />}
-        {tab === 'flow' && (
+        {activeTab === 'output' && <JobOutput job={job} />}
+        {activeTab === 'investigation' && <JobInvestigations job={job} aiEnabled={aiEnabled} />}
+        {activeTab === 'flow' && (
         <div className="m-jflow">
           {/* CHECK */}
           <div className="m-jstep">

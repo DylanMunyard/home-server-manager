@@ -230,6 +230,60 @@ nodes: all                  # or a list of <group>/<server> ids
 - **Mobile** gets a 4th tab (`dash`); the same `Dashboard` renders single-column
   via `.m-app .dash` token remap + grid override. Detail uses native scroll.
 
+## AI assistant — Azure OpenAI
+
+Optional AI features (`api/src/ai/`, UI in `ui/src/jobs/Investigation.tsx`),
+talking to an **Azure OpenAI** deployment over the chat-completions REST API
+directly — plain `fetch`, no SDK (same ethos as `ntfy.ts`).
+
+- **Env-driven, never hard-fails.** `ai.config.ts` reads `AZURE_OPENAI_ENDPOINT`
+  / `_API_KEY` / `_DEPLOYMENT` / `_API_VERSION` (+ optional `_REASONING_EFFORT`)
+  from `.env`. Unset ⇒ `enabled: false`, the API still runs, AI no-ops, and the
+  UI hides its affordances — the clone-and-go property holds (like ntfy, unlike
+  the load-bearing `auth.config.ts`).
+- **Reasoning-model client.** The deployment is `o4-mini` (a reasoning model):
+  the client sends `max_completion_tokens` (NOT `max_tokens`), **omits
+  `temperature`** (it rejects a non-default), and may pass `reasoning_effort`.
+  `max_completion_tokens` must stay generous — the model spends tokens on hidden
+  reasoning before visible output, so a tight cap returns empty content.
+  `chatRaw` returns the raw assistant message (incl. `tool_calls`) for the
+  agentic loop; `chat` wraps it for one-shot text. See [secrets ref in memory].
+
+### Jobs AI Investigator (`ai.investigate.ts`)
+
+When a job opts in with **`investigate:`** (per `config/jobs/*.yaml`, off by
+default — it costs tokens + SSH per failure) and then fails, an agentic loop runs
+to correlate *what was happening on the box*. `investigate:` is `true`, *or a
+string* — a free-text intent that both enables it and steers the probe loop
+(e.g. "correlate the high temp with what's running"). The loader splits the
+string into `investigate: true` + `investigateHint`; an omitted hint means the
+AI infers intent from the script + output + metrics.
+
+- The model is given the failure context — the job's + runbook's descriptions,
+  the optional intent hint, the check script + output, the target, and recent
+  metrics from `getSnapshot()` — and one tool, `run_probe(purpose, bash)`. It
+  runs a *varying* number of **read-only** probes (`collectScript` over SSH),
+  reads each result, decides the next, then stops and summarises.
+- The summary is pushed as a **follow-up** ntfy (decoupled from the immediate
+  failure alert). The full transcript is buffered in an **in-memory registry**
+  (no persistence — lost on restart, by design) and surfaced live over
+  `GET /ws/ai/investigate?id=` (snapshot-then-forward like `/ws/metrics`) +
+  `GET /api/ai/investigations/:id`. `GET /api/jobs` overlays each target's latest
+  investigation status/summary.
+- **Auxiliary — must never take down the API.** Fired fire-and-forget from
+  `jobs.runner.ts`; the loop never throws into its caller (same stance as jobs /
+  metrics).
+
+**SAFETY IS PARAMOUNT (the user stressed this).** AI-generated bash runs on real
+servers — there is no sandbox. Two aligned layers, *keep them in sync if either
+changes*: (1) PRIMARY — the emphatic read-only system prompt (`INVESTIGATOR` in
+`ai.prompts.ts`): never delete/modify/create files (even temp ones), never write
+via redirects, **never download from the network** (`curl … | bash`), never
+install/control services. (2) BACKSTOP — a command-position denylist in
+`ai.investigate.ts` (rejected probes are reported back to the model, not run) +
+a per-probe `timeout` wrapper + an iteration cap. It is **not** a sandbox; it's
+defence-in-depth behind the prompt, which is why the feature is opt-in.
+
 ## Secrets
 
 Anything sensitive (key passphrases, SSH passwords) lives in `.env` at the

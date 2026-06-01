@@ -18,8 +18,33 @@ ensure_deps() {
   fi
 }
 
+# Kill any stale instance still holding our ports (the API binds 5781, Vite
+# 5780) so a previous run that didn't clean up doesn't cause EADDRINUSE. We
+# target the ports specifically — not a broad `pkill node` — so unrelated Node
+# apps are left alone. Honours a custom $PORT for the API.
+free_ports() {
+  local port pids
+  for port in 5780 "${PORT:-5781}"; do
+    if command -v lsof >/dev/null 2>&1; then
+      pids="$(lsof -ti "tcp:$port" 2>/dev/null || true)"
+    elif command -v fuser >/dev/null 2>&1; then
+      pids="$(fuser "$port/tcp" 2>/dev/null || true)"
+    else
+      pids="$(ss -ltnp 2>/dev/null | grep -oP "(?<=:$port )[^\n]*pid=\K[0-9]+" || true)"
+    fi
+    if [[ -n "$pids" ]]; then
+      echo "==> freeing port $port (killing: $(echo "$pids" | tr '\n' ' '))"
+      kill $pids 2>/dev/null || true
+      sleep 0.5
+      kill -9 $pids 2>/dev/null || true
+    fi
+  done
+}
+
 ensure_deps "$root/api"
 ensure_deps "$root/ui"
+
+free_ports
 
 pids=()
 cleanup() {

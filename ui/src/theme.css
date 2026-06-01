@@ -833,3 +833,109 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .m-app .fb-row-main { grid-template-columns: 1fr auto; gap: 10px; }
 .m-app .fb-bar-track, .m-app .fb-age { display: none; }
 .m-jntfy .nf.pri { border-style: solid; border-color: var(--m-line); background: var(--m-paper-2); }
+
+/* ── AI investigation transcript (desktop) ─────────────────────── */
+.investigations { padding: 16px 22px 12px; }
+.inv-target + .inv-target { margin-top: 22px; border-top: 1px solid var(--line-soft); padding-top: 18px; }
+.inv-target-h { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.inv-target-h .mono { font-size: 13px; }
+.inv-target-h .dim { color: var(--ink-3); }
+.inv-status { font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; padding: 3px 8px; border: 1px solid currentColor; color: var(--ink-3); }
+.inv-status.running { color: #8a6d12; }
+.inv-status.completed { color: var(--ok); }
+.inv-status.error { color: var(--err); }
+
+.investigation { display: flex; flex-direction: column; gap: 14px; }
+.inv-start { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
+.inv-start b { color: var(--ink); text-transform: none; }
+.inv-start-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+
+/* assistant chat — clearly distinct from the tool calls below */
+.inv-msg { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+.inv-who { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); padding-top: 5px; }
+.inv-bubble { background: var(--bg-2); border: 1px solid var(--line-soft); padding: 10px 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+
+/* tool call — bash code block + its output, framed as one request/response */
+.inv-tool { border: 1px solid var(--line); }
+.inv-tool-head { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--bg-2); border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+.inv-tool-name { font-family: ui-monospace, monospace; font-weight: 700; font-size: 12px; }
+.inv-tool-n { font-size: 10px; color: var(--ink-3); }
+.inv-tool-purpose { font-size: 11px; color: var(--ink-2); font-style: italic; }
+.inv-bash { margin: 0; background: var(--term-bg); color: var(--term-fg); padding: 10px 12px; font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
+.inv-bash code { font-family: inherit; }
+.inv-out { border-top: 1px solid var(--line-soft); }
+.inv-out-head { padding: 6px 10px 0; }
+.inv-exit { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; padding: 2px 7px; border: 1px solid currentColor; }
+.inv-exit.ok { color: var(--ok); }
+.inv-exit.err { color: var(--err); }
+.inv-out-pre { margin: 0; padding: 8px 12px 10px; font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); }
+.inv-out-pre.dim { color: var(--ink-3); font-style: italic; }
+.inv-out.rejected { padding: 9px 12px; color: var(--err); font-size: 12px; }
+.inv-out.running { padding: 9px 12px; color: var(--ink-3); font-style: italic; font-size: 12px; }
+
+/* conclusion — the summary that also lands on the phone */
+.inv-summary { border: 2px solid var(--ink); background: var(--accent); }
+.inv-summary-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; padding: 8px 12px 0; color: var(--ink-2); }
+.inv-summary-body { padding: 8px 12px 12px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+
+.inv-done.err { color: var(--err); font-size: 12px; }
+.inv-live { display: flex; align-items: center; gap: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); }
+.inv-blip { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: inv-pulse 1.2s infinite; }
+@keyframes inv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.inv-empty { color: var(--ink-3); font-size: 12px; font-style: italic; }
+.inv-empty.pad { padding: 20px 22px; line-height: 1.55; max-width: 64ch; }
+.tabrow .tab .tab-badge { color: var(--err); font-size: 8px; vertical-align: super; margin-left: 5px; }
+
+/* manual-trigger bar in the investigation tab */
+.inv-trigger { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.inv-trigger select { font: inherit; font-size: 12px; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); }
+.inv-trigger button { font-size: 12px; padding: 8px 16px; }
+.inv-note { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); }
+.inv-note.err { color: var(--err); }
+
+/* ── AI investigation transcript (mobile / .m-app cream palette) ── */
+.m-app .investigations { padding: 4px 0 8px; }
+.m-app .inv-target + .inv-target { margin-top: 18px; border-top: 1px solid var(--m-line); padding-top: 14px; }
+.m-app .inv-target-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.m-app .inv-target-h .mono { font-size: 12.5px; color: var(--m-ink); }
+.m-app .inv-target-h .dim { color: var(--m-ink-4); }
+.m-app .inv-status { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; padding: 3px 7px; border: 1px solid currentColor; color: var(--m-ink-4); }
+.m-app .inv-status.completed { color: var(--m-ok); }
+.m-app .inv-status.error { color: var(--m-err); }
+.m-app .investigation { display: flex; flex-direction: column; gap: 12px; }
+.m-app .inv-start { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--m-ink-4); display: flex; align-items: center; gap: 7px; }
+.m-app .inv-start b { color: var(--m-ink); text-transform: none; }
+.m-app .inv-start-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--m-ink); }
+.m-app .inv-msg { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start; }
+.m-app .inv-who { font-size: 9px; text-transform: uppercase; color: var(--m-ink-4); padding-top: 4px; }
+.m-app .inv-bubble { background: var(--m-paper-2); border: 1px solid var(--m-line-soft); padding: 9px 11px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.m-app .inv-tool { border: 1px solid var(--m-line); }
+.m-app .inv-tool-head { display: flex; align-items: center; gap: 9px; padding: 6px 9px; background: var(--m-paper-2); border-bottom: 1px solid var(--m-line-soft); flex-wrap: wrap; }
+.m-app .inv-tool-name { font-family: ui-monospace, monospace; font-weight: 700; font-size: 11.5px; color: var(--m-ink); }
+.m-app .inv-tool-n { font-size: 10px; color: var(--m-ink-4); }
+.m-app .inv-tool-purpose { font-size: 11px; color: var(--m-ink-3); font-style: italic; }
+.m-app .inv-bash { margin: 0; background: var(--m-term-bg); color: var(--m-term-fg); padding: 9px 11px; font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.m-app .inv-out { border-top: 1px solid var(--m-line-soft); }
+.m-app .inv-out-head { padding: 6px 9px 0; }
+.m-app .inv-exit { font-size: 9px; text-transform: uppercase; padding: 2px 6px; border: 1px solid currentColor; }
+.m-app .inv-exit.ok { color: var(--m-ok); }
+.m-app .inv-exit.err { color: var(--m-err); }
+.m-app .inv-out-pre { margin: 0; padding: 7px 11px 9px; font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--m-ink-2); }
+.m-app .inv-out-pre.dim { color: var(--m-ink-4); font-style: italic; }
+.m-app .inv-out.rejected { padding: 8px 11px; color: var(--m-err); font-size: 11.5px; }
+.m-app .inv-out.running { padding: 8px 11px; color: var(--m-ink-4); font-style: italic; font-size: 11.5px; }
+.m-app .inv-summary { border: 2px solid var(--m-ink); background: #e9c45f; }
+.m-app .inv-summary-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; padding: 8px 11px 0; color: var(--m-ink-2); }
+.m-app .inv-summary-body { padding: 7px 11px 11px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; }
+.m-app .inv-done.err { color: var(--m-err); font-size: 11.5px; }
+.m-app .inv-live { display: flex; align-items: center; gap: 7px; font-size: 10px; text-transform: uppercase; color: var(--m-ink-4); }
+.m-app .inv-blip { width: 6px; height: 6px; border-radius: 50%; background: var(--m-ok); animation: inv-pulse 1.2s infinite; }
+.m-app .inv-empty { color: var(--m-ink-4); font-size: 12px; font-style: italic; }
+.m-app .inv-empty.pad { padding: 16px 2px; line-height: 1.5; }
+.m-jtab-badge { color: var(--m-err); font-size: 8px; vertical-align: super; margin-left: 3px; }
+.m-app .inv-trigger { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.m-app .inv-trigger select { font: inherit; font-size: 12px; padding: 7px 9px; border: 1px solid var(--m-line); background: var(--m-paper); color: var(--m-ink); }
+.m-app .inv-trigger button { font: inherit; font-size: 12px; font-weight: 600; padding: 9px 16px; border: 1px solid var(--m-line); background: var(--m-ink); color: var(--m-paper); text-transform: uppercase; letter-spacing: 0.08em; }
+.m-app .inv-trigger button:disabled { opacity: 0.5; }
+.m-app .inv-note { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--m-ink-4); }
+.m-app .inv-note.err { color: var(--m-err); }

@@ -63,12 +63,40 @@ export type RunResult = {
   durationMs: number;
 };
 
+// ── AI investigation ────────────────────────────────────────────
+// Mirror of api/src/ai/ai.investigate.ts — an agentic read-only probe loop that
+// runs when an `investigate: true` job fails.
+export type InvestigationStatus = 'running' | 'completed' | 'error';
+
+// Streamed over /ws/ai/investigate (and buffered in GET /api/ai/investigations/:id).
+export type InvestigationEvent =
+  | { type: 'start'; jobName: string; target: string; reason: string }
+  | { type: 'note'; text: string }                                  // model chat / reasoning
+  | { type: 'probe'; n: number; purpose: string; bash: string }     // a tool call
+  | { type: 'output'; n: number; exitCode: number | null; stdout: string; stderr: string; rejected?: string }
+  | { type: 'summary'; text: string }
+  | { type: 'done'; status: 'completed' | 'error'; error?: string };
+
+export type Investigation = {
+  id: string;
+  jobId: string;
+  target: string;
+  status: InvestigationStatus;
+  startedAt: string;
+  summary?: string;
+  error?: string;
+  events: InvestigationEvent[];
+};
+
 // Mirrors the API's per-target outcome within a JobRunState.
 export type TargetRunState = {
   lastCheck?: RunResult;
   lastTriggered?: boolean;
   lastAction?: RunResult;
   lastError?: string;
+  // Latest AI investigation for this target (overlaid live by GET /api/jobs);
+  // the full transcript streams over /ws/ai/investigate?id=…
+  investigation?: { id: string; status: InvestigationStatus; summary?: string };
 };
 
 // Mirrors the API's in-memory JobRunState. No history — single last-run snapshot
@@ -92,6 +120,7 @@ export type Job = {
   notify?: JobNotify;
   env?: Record<string, string>;
   params?: Record<string, string>;   // literal values for the runbook's declared params
+  investigate?: boolean;              // opt-in AI post-failure investigation
   nextRunAt: string | null;
   state: JobRunState;
 };
@@ -184,6 +213,39 @@ export async function fetchJobs(): Promise<Job[]> {
 
 export async function fetchMetrics(): Promise<MetricsSnapshot> {
   const r = await apiGet('/api/metrics', 'failed to load metrics');
+  return r.json();
+}
+
+// Buffered transcript of one investigation (the /ws live stream is the realtime
+// counterpart, used by useInvestigation).
+export async function fetchInvestigation(id: string): Promise<Investigation> {
+  const r = await apiGet(`/api/ai/investigations/${encodeURIComponent(id)}`, 'failed to load investigation');
+  return r.json();
+}
+
+export type AiStatus = { enabled: boolean; deployment: string | null; apiVersion: string };
+
+export async function fetchAiStatus(): Promise<AiStatus> {
+  const r = await apiGet('/api/ai/status', 'failed to load AI status');
+  return r.json();
+}
+
+// Manually kick off an investigation against a job's last run (test hook for
+// iterating on the prompt). Returns {id,target} on success, or {error} for the
+// 404/409/503 cases so the caller can surface the reason inline.
+export async function investigateJob(
+  id: string,
+  target?: string,
+): Promise<{ id?: string; target?: string; error?: string }> {
+  const r = await fetch(`/api/jobs/${encodeURIComponent(id)}/investigate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ target }),
+  });
+  if (r.status === 401) {
+    window.location.href = '/api/auth/login';
+    return new Promise(() => {});
+  }
   return r.json();
 }
 
