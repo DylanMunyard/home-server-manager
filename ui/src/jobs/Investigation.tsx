@@ -174,9 +174,9 @@ export function JobInvestigations({ job, aiEnabled }: { job: Job; aiEnabled: boo
 
       {!manualId && fromState.length === 0 && (
         <div className="inv-empty pad">
-          No investigation yet. Trigger one above to test against the last run — or,
-          if this job sets <code>investigate</code>, it runs automatically when the
-          job fails (read-only probes + a follow-up notification).
+          No investigation yet. Hit <b>Investigate last run</b> above to probe the
+          host (read-only) and correlate the cause. Investigations run only when
+          you trigger them here — they don't fire automatically.
         </div>
       )}
     </div>

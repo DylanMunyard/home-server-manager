@@ -22,10 +22,10 @@ notify:
   on: [error]
   priority: high
 
-# When a host runs hot, kick off an AI investigation of that box — an agentic
-# loop of read-only SSH probes. `investigate:` can be `true`, or (as here) a
-# free-text intent that steers the probe loop. No-op if Azure OpenAI isn't
-# configured. See api/src/ai/ai.investigate.ts.
+# Intent hint for an on-demand AI investigation. Investigations do NOT fire
+# automatically — when a host runs hot you trigger one from the Jobs UI
+# ("Investigate"), and this text steers that read-only probe loop. No effect if
+# Azure OpenAI isn't configured. See api/src/ai/ai.investigate.ts.
 investigate: >
   Correlate the sustained high temperature with what was actually running on the
   box at the time — identify the process(es) or workload (e.g. a transcode,

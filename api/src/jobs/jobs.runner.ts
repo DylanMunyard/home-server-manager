@@ -4,8 +4,6 @@ import { loadRunbook, resolveParamValues, type Runbook } from '../runbooks/runbo
 import { collectScript } from '../ssh/ssh.collect.js';
 import { exportPrelude } from '../ssh/prelude.js';
 import { sendAlert } from '../alerts/ntfy.js';
-import { loadAiConfig } from '../ai/ai.config.js';
-import { startInvestigation } from '../ai/ai.investigate.js';
 import type { JobConfig, JobRunState, RunResult, TargetRunState, Trigger } from './jobs.types.js';
 
 // In-memory job state. Lost on restart by design — the scheduler just starts
@@ -174,27 +172,12 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
         });
       }
 
-      // Opt-in AI investigation. Fire-and-forget (it pushes its own follow-up
-      // ntfy when done) and decoupled from the alert above so investigation
-      // latency never delays it. Skipped silently when AI isn't configured.
-      if (job.investigate && loadAiConfig().enabled) {
-        const wfRunbook = workFailure.runbookId === job.run
-          ? checkRunbook
-          : await loadRunbook(workFailure.runbookId);
-        startInvestigation({
-          jobId: job.id,
-          jobName: job.name,
-          jobDescription: job.description,
-          target,
-          runbookId: workFailure.runbookId,
-          runbookDescription: wfRunbook?.description,
-          runbookContents: wfRunbook?.contents ?? '',
-          result: workFailure.result,
-          triggerReason: workFailure.reason,
-          hint: job.investigateHint,
-          notifyPriority: priority,
-        });
-      }
+      // NOTE: AI investigation is intentionally NOT auto-triggered here. It runs
+      // only on demand from the Jobs UI ("Investigate" → POST /api/jobs/:id/
+      // investigate), so a flapping check can't spiral into an investigation
+      // every tick. The job's `investigate:` hint still steers those manual
+      // runs. (If auto-firing is reintroduced, gate it behind a per-host
+      // cooldown so it can't run on every failure.)
     }
 
     console.log(

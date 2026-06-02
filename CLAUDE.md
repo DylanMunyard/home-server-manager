@@ -251,28 +251,33 @@ directly — plain `fetch`, no SDK (same ethos as `ntfy.ts`).
 
 ### Jobs AI Investigator (`ai.investigate.ts`)
 
-When a job opts in with **`investigate:`** (per `config/jobs/*.yaml`, off by
-default — it costs tokens + SSH per failure) and then fails, an agentic loop runs
-to correlate *what was happening on the box*. `investigate:` is `true`, *or a
-string* — a free-text intent that both enables it and steers the probe loop
-(e.g. "correlate the high temp with what's running"). The loader splits the
-string into `investigate: true` + `investigateHint`; an omitted hint means the
-AI infers intent from the script + output + metrics.
+An agentic loop that correlates *what was happening on the box* when a job's
+check fails. **On demand only — it does NOT fire automatically.** You trigger it
+per-host from the Jobs UI ("Investigate" → `POST /api/jobs/:id/investigate`),
+which builds context from that target's **last run** and runs the loop. (Manual
+trigger was a deliberate choice — a flapping check, e.g. a host that stays hot,
+would otherwise spiral into an investigation every tick. If auto-firing is ever
+reintroduced, gate it behind a per-host cooldown.)
 
+- **`investigate:`** in a job (`config/jobs/*.yaml`) is an *optional intent hint*
+  for those manual runs — `true`, or a string describing what to focus on (e.g.
+  "correlate the high temp with what's running"). The loader splits a string into
+  `investigate: true` + `investigateHint`; omitted ⇒ the AI infers intent from
+  the script + output + metrics. It no longer gates anything: the UI shows the
+  Investigate affordance for any job whenever AI is configured.
 - The model is given the failure context — the job's + runbook's descriptions,
   the optional intent hint, the check script + output, the target, and recent
   metrics from `getSnapshot()` — and one tool, `run_probe(purpose, bash)`. It
   runs a *varying* number of **read-only** probes (`collectScript` over SSH),
   reads each result, decides the next, then stops and summarises.
-- The summary is pushed as a **follow-up** ntfy (decoupled from the immediate
-  failure alert). The full transcript is buffered in an **in-memory registry**
-  (no persistence — lost on restart, by design) and surfaced live over
-  `GET /ws/ai/investigate?id=` (snapshot-then-forward like `/ws/metrics`) +
-  `GET /api/ai/investigations/:id`. `GET /api/jobs` overlays each target's latest
-  investigation status/summary.
-- **Auxiliary — must never take down the API.** Fired fire-and-forget from
-  `jobs.runner.ts`; the loop never throws into its caller (same stance as jobs /
-  metrics).
+- The transcript is buffered in an **in-memory registry** (no persistence — lost
+  on restart, by design) and surfaced live over `GET /ws/ai/investigate?id=`
+  (snapshot-then-forward like `/ws/metrics`) + `GET /api/ai/investigations/:id`.
+  `GET /api/jobs` overlays each target's latest investigation status/summary.
+  Manual runs **suppress** the follow-up ntfy (no phone spam while iterating);
+  the push path remains for any future auto-trigger.
+- **Auxiliary — must never take down the API.** Started fire-and-forget; the loop
+  never throws into its caller (same stance as jobs / metrics).
 
 **SAFETY IS PARAMOUNT (the user stressed this).** AI-generated bash runs on real
 servers — there is no sandbox. Two aligned layers, *keep them in sync if either
