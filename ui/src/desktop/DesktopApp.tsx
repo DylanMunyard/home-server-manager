@@ -9,14 +9,16 @@ import { Terminal, type TerminalHandle } from '../terminal/Terminal.tsx';
 import { JobsView } from '../jobs/JobsView.tsx';
 import { Dashboard } from '../metrics/Dashboard.tsx';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
+import { ChatSession } from '../ai/ChatSession.tsx';
 import { testAlert } from '../shared/api.ts';
 import { useGroups, useServerDetail } from '../servers/useServers.ts';
 import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
 import { useRunbookParams } from '../runbooks/useRunbookParams.ts';
 import { useSshStream } from '../terminal/useSshStream.ts';
 import { useShellStream } from '../terminal/useShellStream.ts';
+import { useAiStatus } from '../jobs/useAiStatus.ts';
 
-type Mode = 'runbook' | 'shell';
+type Mode = 'runbook' | 'shell' | 'chat';
 type TopView = 'console' | 'jobs' | 'dashboard';
 
 const RUN_STATUS_LABEL: Record<string, string> = {
@@ -38,6 +40,8 @@ const SHELL_STATUS_LABEL: Record<string, string> = {
 export function DesktopApp() {
   const { groups, allServers } = useGroups();
   const { runbooks } = useRunbooks();
+  const aiStatus = useAiStatus();
+  const aiEnabled = aiStatus?.enabled ?? false;
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -53,7 +57,8 @@ export function DesktopApp() {
   // Selections live in the query string so refresh + share + back-button work.
   const serverId = searchParams.get('server');
   const runbookId = searchParams.get('runbook');
-  const mode: Mode = (searchParams.get('mode') as Mode) === 'shell' ? 'shell' : 'runbook';
+  const rawMode = searchParams.get('mode') as Mode | null;
+  const mode: Mode = rawMode === 'shell' ? 'shell' : rawMode === 'chat' ? 'chat' : 'runbook';
 
   const setTopView = useCallback((v: TopView) => {
     if (v === 'jobs') navigate('/jobs');
@@ -112,6 +117,9 @@ export function DesktopApp() {
     disconnectShell();
     updateParams({ mode: next === 'runbook' ? null : next });
   }, [mode, cancelRun, disconnectShell, updateParams]);
+
+  // Seed message from ?seed= param (set by the jobs view "Chat" button).
+  const seedMessage = searchParams.get('seed') ?? undefined;
 
   const canRun = mode === 'runbook' && !!serverId && !!runbookId && paramsComplete
     && runState !== 'connecting' && runState !== 'running';
@@ -179,9 +187,22 @@ export function DesktopApp() {
           <nav className="mode-tabs">
             <button data-active={mode === 'runbook'} onClick={() => switchMode('runbook')}>Runbook</button>
             <button data-active={mode === 'shell'}   onClick={() => switchMode('shell')}>Shell</button>
+            {aiEnabled && (
+              <button data-active={mode === 'chat'} onClick={() => switchMode('chat')}>AI Chat</button>
+            )}
           </nav>
 
-          {mode === 'runbook' ? (
+          {mode === 'chat' ? (
+            serverId ? (
+              <ChatSession
+                key={serverId}
+                target={serverId}
+                seedMessage={seedMessage}
+              />
+            ) : (
+              <div className="empty">Select a server to start an AI chat session.</div>
+            )
+          ) : mode === 'runbook' ? (
             <>
               <div className="stage-head">
                 <h2>{runbook?.name ?? 'Select a runbook'}</h2>
@@ -244,10 +265,14 @@ export function DesktopApp() {
             </>
           )}
 
-          <Terminal ref={termRef} onInput={onTerminalInput} onResize={onTerminalResize} />
+          {mode !== 'chat' && (
+            <Terminal ref={termRef} onInput={onTerminalInput} onResize={onTerminalResize} />
+          )}
         </main>
 
-        <RunbookList runbooks={runbooks} selectedId={runbookId} onSelect={(id) => updateParams({ runbook: id })} />
+        {mode !== 'chat' && (
+          <RunbookList runbooks={runbooks} selectedId={runbookId} onSelect={(id) => updateParams({ runbook: id })} />
+        )}
       </div>
       )}
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useInvestigation } from './useInvestigation.ts';
 import { investigateJob, type InvestigationEvent, type Job } from '../shared/api.ts';
 
@@ -126,6 +127,7 @@ export function JobInvestigations({ job, aiEnabled }: { job: Job; aiEnabled: boo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [manualId, setManualId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const trigger = async () => {
     setBusy(true);
@@ -134,6 +136,12 @@ export function JobInvestigations({ job, aiEnabled }: { job: Job; aiEnabled: boo
     setBusy(false);
     if (r.id) setManualId(r.id);
     else setError(r.error ?? 'failed to start investigation');
+  };
+
+  const openChat = (t: string, summary?: string) => {
+    const params = new URLSearchParams({ server: t, mode: 'chat' });
+    if (summary) params.set('seed', `Investigation summary for ${job.name} on ${t.split('/')[1]}: ${summary}\n\nWhat would you like to investigate or fix?`);
+    navigate(`/console?${params.toString()}`);
   };
 
   const fromState = job.targets
@@ -152,6 +160,9 @@ export function JobInvestigations({ job, aiEnabled }: { job: Job; aiEnabled: boo
         <button onClick={trigger} disabled={busy || !aiEnabled}>
           {busy ? 'Starting…' : 'Investigate last run ▸'}
         </button>
+        <button onClick={() => openChat(target)} disabled={!aiEnabled} title="Open an interactive AI chat for this server">
+          Chat ▸
+        </button>
         {!aiEnabled
           ? <span className="inv-note">AI not configured</span>
           : <span className="inv-note">runs read-only probes on {job.targets.length > 1 ? target.split('/')[1] : 'the host'} · for testing the prompt</span>}
@@ -162,12 +173,17 @@ export function JobInvestigations({ job, aiEnabled }: { job: Job; aiEnabled: boo
 
       {fromState.map(({ target: t, inv }) => (
         <div key={t} className="inv-target">
-          {job.targets.length > 1 && (
-            <div className="inv-target-h">
+          <div className="inv-target-h">
+            {job.targets.length > 1 && (
               <span className="mono"><span className="dim">{t.split('/')[0]}/</span>{t.split('/')[1]}</span>
-              <span className={`inv-status ${inv.status}`}>{inv.status}</span>
-            </div>
-          )}
+            )}
+            <span className={`inv-status ${inv.status}`}>{inv.status}</span>
+            {inv.status === 'completed' && (
+              <button className="inv-chat-btn" onClick={() => openChat(t, inv.summary)}>
+                Chat about this ▸
+              </button>
+            )}
+          </div>
           <Investigation id={inv.id} />
         </div>
       ))}

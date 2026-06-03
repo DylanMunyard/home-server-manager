@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
 import { loadAiConfig } from './ai.config.js';
-import { chat, type ChatMessage } from './ai.client.js';
+import { chat, type ChatMessage, type ConvoMessage } from './ai.client.js';
 import { APP_CONTEXT, RUNBOOK_AUTHORING } from './ai.prompts.js';
 import {
   getInvestigation,
   subscribeInvestigation,
   type InvestigationEvent,
 } from './ai.investigate.js';
+import { runChatTurn } from './ai.chat.js';
 
 type ChatBody = {
   // Either a one-shot prompt or a full message history (without the system
@@ -62,6 +63,26 @@ export async function aiRoutes(app: FastifyInstance) {
     const { id, jobId, target, status, startedAt, summary, error, events } = inv;
     return { id, jobId, target, status, startedAt, summary, error, events };
   });
+
+  // Interactive chat session — one turn at a time. The client owns the message
+  // history (stateless server), passing its full ConvoMessage[] back each call.
+  // The server prepends the system message and runs the tool loop. Returns the
+  // new turns to append (events for rendering + messages for the next request).
+  app.post<{ Body: { target: string; history: ConvoMessage[]; userMessage: string } }>(
+    '/api/ai/chat-session',
+    async (req, reply) => {
+      const { target, history, userMessage } = req.body ?? {};
+      if (!target || !userMessage) {
+        return reply.code(400).send({ error: 'provide `target` and `userMessage`' });
+      }
+      if (!loadAiConfig().enabled) {
+        return reply.code(503).send({ ok: false, error: 'AI not configured — set AZURE_OPENAI_* in .env' });
+      }
+      const result = await runChatTurn(target, history ?? [], userMessage);
+      if (!result.ok) return reply.code(result.skipped ? 503 : 502).send(result);
+      return result;
+    },
+  );
 
   // Live investigation stream: replay the buffered transcript, then forward new
   // events until the loop is done (then close). Mirrors /ws/metrics; auth is the
