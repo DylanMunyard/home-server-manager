@@ -250,45 +250,21 @@ export async function investigateJob(
 }
 
 // ── AI chat session ─────────────────────────────────────────────
-// Stateless interactive chat: client owns the ConvoMessage history and passes
-// it back each turn. The server prepends the system message and runs the AI
-// tool loop, then returns the new turns to append + events for rendering.
-
+// Interactive chat: streamed live over /ws/ai/chat. The client owns the history
+// (stateless server) and sends `{ history, userMessage }` frames; the server
+// streams these events as the tool loop runs, ending each turn with `done` which
+// carries the new turns to append (so the next frame replays full history).
 export type ConvoMessage =
   | { role: 'user' | 'system'; content: string }
   | { role: 'assistant'; content: string | null; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[] }
   | { role: 'tool'; tool_call_id: string; content: string };
 
 export type ChatEvent =
+  | { type: 'status'; phase: 'thinking' | 'running'; n?: number; purpose?: string }
   | { type: 'text'; content: string }
   | { type: 'cmd'; n: number; purpose: string; bash: string }
-  | { type: 'output'; n: number; exitCode: number | null; stdout: string; stderr: string; rejected?: string };
-
-export type ChatTurnResult = {
-  ok: boolean;
-  skipped?: boolean;
-  error?: string;
-  events: ChatEvent[];
-  messages: ConvoMessage[];
-};
-
-export async function chatSession(
-  target: string,
-  history: ConvoMessage[],
-  userMessage: string,
-): Promise<ChatTurnResult> {
-  const r = await fetch('/api/ai/chat-session', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ target, history, userMessage }),
-  });
-  if (r.status === 401) {
-    window.location.href = '/api/auth/login';
-    return new Promise(() => {});
-  }
-  const data = await r.json() as ChatTurnResult;
-  return r.ok ? data : { ...data, ok: false };
-}
+  | { type: 'output'; n: number; exitCode: number | null; stdout: string; stderr: string; rejected?: string }
+  | { type: 'done'; ok: boolean; error?: string; messages: ConvoMessage[] };
 
 // ── File browser ────────────────────────────────────────────────
 // Mirror of api/src/files/files.types.ts.

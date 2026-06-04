@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { useChat, type ChatItem } from './useChat.ts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useChat, type ChatItem, type ChatPhase } from './useChat.ts';
 
-function CmdBlock({ item }: { item: Extract<ChatItem, { kind: 'cmd' }> }) {
+function CmdBlock({ item, running }: { item: Extract<ChatItem, { kind: 'cmd' }>; running: boolean }) {
   return (
-    <div className="chat-cmd">
+    <div className={`chat-cmd${running ? ' running' : ''}`}>
       <div className="chat-cmd-head">
         <span className="chat-cmd-name">run_command</span>
         <span className="chat-cmd-n">#{item.n}</span>
         {item.purpose && <span className="chat-cmd-purpose">{item.purpose}</span>}
+        {running && <span className="chat-cmd-running">running…</span>}
       </div>
       <pre className="chat-bash"><code>{item.bash}</code></pre>
     </div>
@@ -30,7 +31,7 @@ function OutputBlock({ item }: { item: Extract<ChatItem, { kind: 'output' }> }) 
   );
 }
 
-function ChatItemRow({ item }: { item: ChatItem }) {
+function ChatItemRow({ item, runningN }: { item: ChatItem; runningN: number | null }) {
   switch (item.kind) {
     case 'user':
       return (
@@ -46,12 +47,21 @@ function ChatItemRow({ item }: { item: ChatItem }) {
         </div>
       );
     case 'cmd':
-      return <CmdBlock item={item} />;
+      return <CmdBlock item={item} running={item.n === runningN} />;
     case 'output':
       return <OutputBlock item={item} />;
     case 'error':
       return <div className="chat-row error">{item.text}</div>;
   }
+}
+
+// What the server is doing right now, in words, for the live status line.
+function phaseLabel(phase: ChatPhase): string {
+  if (!phase) return 'working…';
+  if (phase.phase === 'running') {
+    return phase.purpose ? `running #${phase.n}: ${phase.purpose}` : `running command #${phase.n}…`;
+  }
+  return 'thinking…';
 }
 
 type Props = {
@@ -62,37 +72,43 @@ type Props = {
 };
 
 export function ChatSession({ target, seedMessage }: Props) {
-  const { items, busy, sendMessage, reset } = useChat(target);
+  const { items, busy, phase, sendMessage } = useChat(target);
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const seededRef = useRef(false);
 
-  // Auto-scroll to bottom on new items.
+  // The command (by n) currently executing — its cmd block shows "running…"
+  // until the matching output arrives.
+  const runningN = phase?.phase === 'running' ? phase.n ?? null : null;
+
+  // Whether the in-flight phase is already represented by a visible cmd block
+  // (so we don't also show a redundant standalone "thinking" line for it).
+  const hasOutput = useMemo(() => {
+    const s = new Set<number>();
+    for (const it of items) if (it.kind === 'output') s.add(it.n);
+    return s;
+  }, [items]);
+  const cmdRunningVisible = runningN != null && !hasOutput.has(runningN);
+
+  // Auto-scroll to bottom on new items / status changes.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [items, busy]);
+  }, [items, busy, phase]);
 
   // Send seed message once on mount.
   useEffect(() => {
     if (seedMessage && !seededRef.current) {
       seededRef.current = true;
-      void sendMessage(seedMessage);
+      sendMessage(seedMessage);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Reset history when the target changes.
-  useEffect(() => {
-    seededRef.current = false;
-    reset();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target]);
 
   const submit = () => {
     const text = input.trim();
     if (!text || busy) return;
     setInput('');
-    void sendMessage(text);
+    sendMessage(text);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -111,11 +127,14 @@ export function ChatSession({ target, seedMessage }: Props) {
             It can run commands on the server.
           </div>
         )}
-        {items.map((item, i) => <ChatItemRow key={i} item={item} />)}
-        {busy && (
+        {items.map((item, i) => <ChatItemRow key={i} item={item} runningN={runningN} />)}
+        {busy && !cmdRunningVisible && (
           <div className="chat-row ai">
             <span className="chat-who">AI</span>
-            <div className="chat-bubble ai thinking">thinking…</div>
+            <div className="chat-status">
+              <span className="chat-status-dot" />
+              {phaseLabel(phase)}
+            </div>
           </div>
         )}
         <div ref={bottomRef} />

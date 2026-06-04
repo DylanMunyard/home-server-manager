@@ -8,7 +8,7 @@ import {
   subscribeInvestigation,
   type InvestigationEvent,
 } from './ai.investigate.js';
-import { runChatTurn } from './ai.chat.js';
+import { runChatTurn, type ChatEvent } from './ai.chat.js';
 
 type ChatBody = {
   // Either a one-shot prompt or a full message history (without the system
@@ -64,25 +64,60 @@ export async function aiRoutes(app: FastifyInstance) {
     return { id, jobId, target, status, startedAt, summary, error, events };
   });
 
-  // Interactive chat session — one turn at a time. The client owns the message
-  // history (stateless server), passing its full ConvoMessage[] back each call.
-  // The server prepends the system message and runs the tool loop. Returns the
-  // new turns to append (events for rendering + messages for the next request).
-  app.post<{ Body: { target: string; history: ConvoMessage[]; userMessage: string } }>(
-    '/api/ai/chat-session',
-    async (req, reply) => {
-      const { target, history, userMessage } = req.body ?? {};
-      if (!target || !userMessage) {
-        return reply.code(400).send({ error: 'provide `target` and `userMessage`' });
+  // Interactive chat session — a live tool-calling loop streamed turn by turn.
+  // The client owns the history (stateless server, same as the rest): it sends
+  // `{ history, userMessage }` frames; the server streams `status`/`text`/`cmd`/
+  // `output` events as the loop runs (so the UI shows real progress, not a static
+  // "thinking…"), then a terminal `done` carrying the new turns to append. Client
+  // ownership keeps the conversation resilient across socket drops/API restarts.
+  // Mirrors /ws/shell (interactive) + /ws/ai/investigate (event stream).
+  app.get<{ Querystring: { target?: string } }>('/ws/ai/chat', { websocket: true }, (socket, req) => {
+    const ws = socket as unknown as WebSocket;
+    type DoneEvent = { type: 'done'; ok: boolean; error?: string; messages: ConvoMessage[] };
+    const send = (e: ChatEvent | DoneEvent) => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(e));
+    };
+
+    const target = req.query.target;
+    if (!target) {
+      send({ type: 'done', ok: false, error: 'missing `target` query param', messages: [] });
+      ws.close();
+      return;
+    }
+    if (!loadAiConfig().enabled) {
+      send({ type: 'done', ok: false, error: 'AI not configured — set AZURE_OPENAI_* in .env', messages: [] });
+      ws.close();
+      return;
+    }
+
+    let busy = false;
+
+    ws.on('message', (raw: Buffer) => {
+      if (busy) return; // one turn at a time; ignore frames sent mid-turn
+      let history: ConvoMessage[];
+      let userMessage: string;
+      try {
+        const b = JSON.parse(raw.toString()) as { history?: ConvoMessage[]; userMessage?: unknown };
+        history = Array.isArray(b.history) ? b.history : [];
+        userMessage = String(b.userMessage ?? '');
+      } catch {
+        return; // ignore malformed frames
       }
-      if (!loadAiConfig().enabled) {
-        return reply.code(503).send({ ok: false, error: 'AI not configured — set AZURE_OPENAI_* in .env' });
-      }
-      const result = await runChatTurn(target, history ?? [], userMessage);
-      if (!result.ok) return reply.code(result.skipped ? 503 : 502).send(result);
-      return result;
-    },
-  );
+      if (!userMessage.trim()) return;
+
+      busy = true;
+      // Auxiliary feature — must never throw into the connection. runChatTurn
+      // returns errors; this catch is the belt-and-braces backstop.
+      void runChatTurn(target, history, userMessage, send)
+        .then((result) => {
+          send({ type: 'done', ok: result.ok, error: result.error, messages: result.ok ? result.messages : [] });
+        })
+        .catch((err: unknown) => {
+          send({ type: 'done', ok: false, error: err instanceof Error ? err.message : String(err), messages: [] });
+        })
+        .finally(() => { busy = false; });
+    });
+  });
 
   // Live investigation stream: replay the buffered transcript, then forward new
   // events until the loop is done (then close). Mirrors /ws/metrics; auth is the

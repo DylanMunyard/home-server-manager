@@ -3,8 +3,12 @@ import { collectScript } from '../ssh/ssh.collect.js';
 import { chatRaw, type ConvoMessage, type ToolDef } from './ai.client.js';
 import { APP_CONTEXT, ASSISTANT } from './ai.prompts.js';
 
-// Events emitted per turn — rendered by the UI as the conversation unfolds.
+// Events streamed per turn — rendered by the UI as the conversation unfolds.
+// `status` exposes *where the turn is right now* so the UI can show real
+// progress (waiting on the model vs running a command) instead of a static
+// "thinking…": emitted before each model call and before each SSH command.
 export type ChatEvent =
+  | { type: 'status'; phase: 'thinking' | 'running'; n?: number; purpose?: string }
   | { type: 'text'; content: string }
   | { type: 'cmd'; n: number; purpose: string; bash: string }
   | { type: 'output'; n: number; exitCode: number | null; stdout: string; stderr: string; rejected?: string };
@@ -13,11 +17,10 @@ export type ChatTurnResult = {
   ok: boolean;
   skipped?: boolean;
   error?: string;
-  events: ChatEvent[];
-  // New ConvoMessage turns to append to the client's history (includes the
-  // user message we just processed + all assistant/tool turns). The client
-  // passes its full stored history back on the next call; the server prepends
-  // the system message. No server-side session state needed.
+  // New ConvoMessage turns produced this turn (the user message + all
+  // assistant/tool turns). The caller appends these to the conversation it
+  // holds for the next turn. History lives in the WS connection scope —
+  // ephemeral, lost on disconnect, no persistence (same ethos as the rest).
   messages: ConvoMessage[];
 };
 
@@ -50,17 +53,17 @@ export async function runChatTurn(
   target: string,
   history: ConvoMessage[],
   userMessage: string,
+  emit: (e: ChatEvent) => void,
 ): Promise<ChatTurnResult> {
   const server = await loadServer(target);
   if (!server) {
-    return { ok: false, error: `unknown target '${target}'`, events: [], messages: [] };
+    return { ok: false, error: `unknown target '${target}'`, messages: [] };
   }
 
-  const events: ChatEvent[] = [];
-  // Accumulate new turns to hand back to the client.
+  // Accumulate new turns to hand back to the caller (for the next turn).
   const newMessages: ConvoMessage[] = [{ role: 'user', content: userMessage }];
 
-  // Full conversation the model sees (system not stored client-side).
+  // Full conversation the model sees (system not stored in history).
   const messages: ConvoMessage[] = [
     { role: 'system', content: `${APP_CONTEXT}\n\n${ASSISTANT}` },
     ...history,
@@ -70,12 +73,13 @@ export async function runChatTurn(
   let cmdN = 0;
 
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    emit({ type: 'status', phase: 'thinking' });
     const r = await chatRaw(messages, { tools: [RUN_COMMAND] });
     if (r.skipped) {
-      return { ok: false, skipped: true, error: 'AI not configured', events, messages: newMessages };
+      return { ok: false, skipped: true, error: 'AI not configured', messages: newMessages };
     }
     if (!r.ok || !r.message) {
-      return { ok: false, error: r.error ?? 'model error', events, messages: newMessages };
+      return { ok: false, error: r.error ?? 'model error', messages: newMessages };
     }
 
     const msg = r.message;
@@ -86,22 +90,22 @@ export async function runChatTurn(
     if (calls.length === 0) {
       // No tool call — model is done, content is the reply.
       const text = (msg.content ?? '').trim();
-      if (text) events.push({ type: 'text', content: text });
-      return { ok: true, events, messages: newMessages };
+      if (text) emit({ type: 'text', content: text });
+      return { ok: true, messages: newMessages };
     }
 
     if (msg.content?.trim()) {
-      events.push({ type: 'text', content: msg.content.trim() });
+      emit({ type: 'text', content: msg.content.trim() });
     }
 
     for (const call of calls) {
       cmdN++;
       const { purpose, bash } = parseArgs(call.function.arguments);
-      events.push({ type: 'cmd', n: cmdN, purpose, bash });
+      emit({ type: 'cmd', n: cmdN, purpose, bash });
 
       const rejection = denylistReason(bash);
       if (rejection) {
-        events.push({ type: 'output', n: cmdN, exitCode: null, stdout: '', stderr: '', rejected: rejection });
+        emit({ type: 'output', n: cmdN, exitCode: null, stdout: '', stderr: '', rejected: rejection });
         const toolMsg: ConvoMessage = {
           role: 'tool',
           tool_call_id: call.id,
@@ -112,10 +116,13 @@ export async function runChatTurn(
         continue;
       }
 
+      // Tell the UI a command is actually executing on the box (it can run for
+      // up to CMD_TIMEOUT_S) so the cmd block shows a live "running…" state.
+      emit({ type: 'status', phase: 'running', n: cmdN, purpose });
       const res = await collectScript(server, wrapCmd(bash));
       const stdout = cap(res.stdout);
       const stderr = cap(res.stderr);
-      events.push({ type: 'output', n: cmdN, exitCode: res.exitCode, stdout, stderr });
+      emit({ type: 'output', n: cmdN, exitCode: res.exitCode, stdout, stderr });
       const toolMsg: ConvoMessage = {
         role: 'tool',
         tool_call_id: call.id,
@@ -127,12 +134,13 @@ export async function runChatTurn(
   }
 
   // Budget exhausted — force a final reply with no tools available.
+  emit({ type: 'status', phase: 'thinking' });
   messages.push({ role: 'user', content: 'Command limit reached. Summarise what you found and what was done.' });
   const final = await chatRaw(messages);
   const text = final.ok ? (final.message?.content ?? '').trim() : '';
-  if (text) events.push({ type: 'text', content: text });
+  if (text) emit({ type: 'text', content: text });
   if (final.ok && final.message) newMessages.push(final.message);
-  return { ok: true, events, messages: newMessages };
+  return { ok: true, messages: newMessages };
 }
 
 // --- helpers ---------------------------------------------------------------

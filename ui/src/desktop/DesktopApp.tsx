@@ -180,7 +180,7 @@ export function DesktopApp() {
       </header>
 
       {topView === 'jobs' ? <JobsView /> : topView === 'dashboard' ? <Dashboard /> : (
-      <div className="workspace">
+      <div className={`workspace${mode === 'chat' ? ' no-rail' : ''}`}>
         <ServerRail groups={groups} selectedId={serverId} onSelect={selectServer} />
 
         <main className="stage">
