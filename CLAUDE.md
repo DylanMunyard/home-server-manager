@@ -47,11 +47,18 @@ defaults:                          # merged into each server; server fields win
   key:  ~/.ssh/id_ed25519
 servers:
   - { id: proxmox,    host: 192.168.1.215 }
-  - { id: plex,       host: 192.168.1.36, name: "plex" }
+  - { id: plex,       host: 192.168.1.36, name: "plex",
+      ai: "Proxmox LXC running a docker-compose stack incl. Plex" }
 ```
 
 - **Global server id is `<group>/<server>`** (e.g. `bethany/proxmox`). Used in
   URLs and WS query params; URL-encode slashes for transport.
+- **`ai:` is an optional free-text note** describing the box (e.g. "runs Docker",
+  "k3s control plane") that's injected into the AI chat's system prompt so the
+  model targets the right tooling without the user re-explaining (see "AI
+  assistant"). Unlike other scalars it's *combined* across defaults+server (group
+  note + per-server note both apply) rather than overridden. Optional, cosmetic
+  to everything except the AI — omit it and the assistant just has less context.
 - **Auth precedence:** if a server entry sets `key:` or `password:`, it picks
   its own auth method completely — defaults supply auth only when the server
   entry sets neither. Avoids weird partial inheritance.
@@ -248,6 +255,26 @@ directly — plain `fetch`, no SDK (same ethos as `ntfy.ts`).
   reasoning before visible output, so a tight cap returns empty content.
   `chatRaw` returns the raw assistant message (incl. `tool_calls`) for the
   agentic loop; `chat` wraps it for one-shot text. See [secrets ref in memory].
+
+### Interactive chat (`ai.chat.ts`, UI `ui/src/ai/`)
+
+A live tool-calling loop over `/ws/ai/chat` — the client owns history (stateless
+server), sends `{ history, userMessage }` frames, and the server streams
+`status`/`text`/`cmd`/`output` events, ending each turn with `done`. `run_command`
+runs bash on the target over SSH; a minimal denylist (`ai.chat.ts`) backstops the
+permissive `ASSISTANT` prompt (a human is directing, so service restarts / edits
+are allowed, unlike the read-only investigator).
+
+- **Per-server context.** The target's `ai:` note (Server YAML) plus its
+  name/host/user are folded into the system prompt (`serverContext()`), so the
+  model knows e.g. "this LXC runs docker-compose" without being told each turn.
+- **Cancel mid-turn.** The client can send a `{ type: 'cancel' }` control frame;
+  the route aborts the in-flight model call (an `AbortSignal` threaded into
+  `chatRaw`'s `fetch`) and the loop stops at the next model-call boundary. Abort
+  is deliberately checked only at boundaries so `newMessages` always ends on a
+  complete assistant/tool pairing — the partial turn is kept (valid history,
+  work preserved), and `done` carries `cancelled: true` (UI shows "stopped",
+  re-enables input). The Stop button (`ChatSession`) replaces Send while busy.
 
 ### Jobs AI Investigator (`ai.investigate.ts`)
 

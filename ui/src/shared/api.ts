@@ -264,7 +264,7 @@ export type ChatEvent =
   | { type: 'text'; content: string }
   | { type: 'cmd'; n: number; purpose: string; bash: string }
   | { type: 'output'; n: number; exitCode: number | null; stdout: string; stderr: string; rejected?: string }
-  | { type: 'done'; ok: boolean; error?: string; messages: ConvoMessage[] };
+  | { type: 'done'; ok: boolean; cancelled?: boolean; error?: string; messages: ConvoMessage[] };
 
 // ── File browser ────────────────────────────────────────────────
 // Mirror of api/src/files/files.types.ts.

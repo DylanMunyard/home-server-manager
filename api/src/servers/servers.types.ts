@@ -20,6 +20,7 @@ export type ServerConfig = {
   port: number;
   user: string;
   auth: ServerAuth;
+  aiContext?: string;  // free-text note describing the box, fed to the AI chat system prompt
 };
 
 export type ServerSummary = {

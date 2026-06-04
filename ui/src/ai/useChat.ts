@@ -6,6 +6,7 @@ export type ChatItem =
   | { kind: 'text'; content: string }
   | { kind: 'cmd'; n: number; purpose: string; bash: string }
   | { kind: 'output'; n: number; exitCode: number | null; stdout: string; stderr: string; rejected?: string }
+  | { kind: 'notice'; text: string }
   | { kind: 'error'; text: string };
 
 // Current phase of the in-flight turn, surfaced so the UI can show *what the
@@ -66,7 +67,8 @@ export function useChat(target: string) {
           break;
         case 'done':
           if (e.ok) historyRef.current = [...historyRef.current, ...e.messages];
-          else setItems((p) => [...p, { kind: 'error', text: e.error ?? 'AI request failed' }]);
+          if (e.cancelled) setItems((p) => [...p, { kind: 'notice', text: 'stopped' }]);
+          else if (!e.ok) setItems((p) => [...p, { kind: 'error', text: e.error ?? 'AI request failed' }]);
           busyRef.current = false;
           setBusy(false);
           setPhase(null);
@@ -107,5 +109,13 @@ export function useChat(target: string) {
     else queueRef.current.push(frame);
   }, [busy]);
 
-  return { items, busy, phase, sendMessage };
+  // Stop the in-flight turn. The server aborts the model call / ends the loop at
+  // the next boundary and replies with a `done` (cancelled), which clears busy.
+  const cancel = useCallback(() => {
+    if (!busyRef.current) return;
+    const ws = wsRef.current;
+    if (ws && readyRef.current && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'cancel' }));
+  }, []);
+
+  return { items, busy, phase, sendMessage, cancel };
 }

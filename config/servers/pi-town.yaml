@@ -3,7 +3,17 @@ description: Raspberry Pi k3s cluster
 defaults:
   user: root
   key:  ~/.ssh/id_ed25519
+  ai:   Raspberry Pi (ARM) running k3s as part of a small cluster. Inspect workloads with kubectl.
 servers:
-  - { id: master,  host: 192.168.1.220, name: "master"  }
-  - { id: level-2, host: 192.168.1.221, name: "level 2" }
-  - { id: level-1, host: 192.168.1.222, name: "level 1" }
+  - id:   master
+    host: 192.168.1.220
+    name: "master"
+    ai:   k3s control-plane node.
+  - id:   level-2
+    host: 192.168.1.221
+    name: "level 2"
+    ai:   k3s worker (agent) node.
+  - id:   level-1
+    host: 192.168.1.222
+    name: "level 1"
+    ai:   k3s worker (agent) node.

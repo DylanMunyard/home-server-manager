@@ -6,3 +6,4 @@ servers:
     user: root
     key:  ~/.ssh/hetzner
     passphrase: ${HETZNER_PASSPHRASE}
+    ai:   Cloud VM running an API + UI stack on single-node k3s. Inspect workloads with kubectl.

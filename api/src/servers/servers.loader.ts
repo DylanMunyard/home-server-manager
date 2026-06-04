@@ -19,6 +19,7 @@ type RawServer = {
   key?: string;
   password?: string;
   passphrase?: string;
+  ai?: string;
 };
 
 // Mirrors ServerConfig but retains the raw key string so the UI can show
@@ -85,6 +86,11 @@ function buildServer(groupId: string, raw: RawServer, defaults: RawServer | unde
   if (!merged.host) throw new Error(`${ctx}: missing 'host'`);
   if (!merged.user) throw new Error(`${ctx}: missing 'user'`);
 
+  // AI context is *combined* (group note + server note), not overridden like
+  // other scalars — so a group-wide `ai:` in defaults ("k3s nodes") and a
+  // per-server `ai:` ("control plane") both reach the assistant's system prompt.
+  const aiContext = [defaults?.ai, raw.ai].map((s) => s?.trim()).filter(Boolean).join('\n') || undefined;
+
   return {
     id: ctx,
     groupId,
@@ -95,6 +101,7 @@ function buildServer(groupId: string, raw: RawServer, defaults: RawServer | unde
     user: merged.user,
     auth: resolveAuth(merged, ctx),
     rawKey: merged.key,
+    aiContext,
   };
 }
 

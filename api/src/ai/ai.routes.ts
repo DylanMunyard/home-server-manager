@@ -73,7 +73,7 @@ export async function aiRoutes(app: FastifyInstance) {
   // Mirrors /ws/shell (interactive) + /ws/ai/investigate (event stream).
   app.get<{ Querystring: { target?: string } }>('/ws/ai/chat', { websocket: true }, (socket, req) => {
     const ws = socket as unknown as WebSocket;
-    type DoneEvent = { type: 'done'; ok: boolean; error?: string; messages: ConvoMessage[] };
+    type DoneEvent = { type: 'done'; ok: boolean; cancelled?: boolean; error?: string; messages: ConvoMessage[] };
     const send = (e: ChatEvent | DoneEvent) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(e));
     };
@@ -91,31 +91,40 @@ export async function aiRoutes(app: FastifyInstance) {
     }
 
     let busy = false;
+    let abort: AbortController | null = null;
 
     ws.on('message', (raw: Buffer) => {
-      if (busy) return; // one turn at a time; ignore frames sent mid-turn
-      let history: ConvoMessage[];
-      let userMessage: string;
+      let b: { type?: string; history?: ConvoMessage[]; userMessage?: unknown };
       try {
-        const b = JSON.parse(raw.toString()) as { history?: ConvoMessage[]; userMessage?: unknown };
-        history = Array.isArray(b.history) ? b.history : [];
-        userMessage = String(b.userMessage ?? '');
+        b = JSON.parse(raw.toString()) as typeof b;
       } catch {
         return; // ignore malformed frames
       }
+
+      // A `cancel` frame stops the in-flight turn (aborts the model call /
+      // ends the loop at the next boundary). Valid only mid-turn.
+      if (b.type === 'cancel') {
+        if (busy) abort?.abort();
+        return;
+      }
+
+      if (busy) return; // one turn at a time; ignore further sends mid-turn
+      const history = Array.isArray(b.history) ? b.history : [];
+      const userMessage = String(b.userMessage ?? '');
       if (!userMessage.trim()) return;
 
       busy = true;
+      abort = new AbortController();
       // Auxiliary feature — must never throw into the connection. runChatTurn
       // returns errors; this catch is the belt-and-braces backstop.
-      void runChatTurn(target, history, userMessage, send)
+      void runChatTurn(target, history, userMessage, send, abort.signal)
         .then((result) => {
-          send({ type: 'done', ok: result.ok, error: result.error, messages: result.ok ? result.messages : [] });
+          send({ type: 'done', ok: result.ok, cancelled: result.cancelled, error: result.error, messages: result.ok ? result.messages : [] });
         })
         .catch((err: unknown) => {
           send({ type: 'done', ok: false, error: err instanceof Error ? err.message : String(err), messages: [] });
         })
-        .finally(() => { busy = false; });
+        .finally(() => { busy = false; abort = null; });
     });
   });
 

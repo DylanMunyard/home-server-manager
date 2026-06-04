@@ -1,4 +1,5 @@
 import { loadServer } from '../servers/servers.loader.js';
+import type { ServerConfig } from '../servers/servers.types.js';
 import { collectScript } from '../ssh/ssh.collect.js';
 import { chatRaw, type ConvoMessage, type ToolDef } from './ai.client.js';
 import { APP_CONTEXT, ASSISTANT } from './ai.prompts.js';
@@ -16,6 +17,7 @@ export type ChatEvent =
 export type ChatTurnResult = {
   ok: boolean;
   skipped?: boolean;
+  cancelled?: boolean;  // user aborted the turn — partial messages are still valid to keep
   error?: string;
   // New ConvoMessage turns produced this turn (the user message + all
   // assistant/tool turns). The caller appends these to the conversation it
@@ -54,6 +56,7 @@ export async function runChatTurn(
   history: ConvoMessage[],
   userMessage: string,
   emit: (e: ChatEvent) => void,
+  signal?: AbortSignal,
 ): Promise<ChatTurnResult> {
   const server = await loadServer(target);
   if (!server) {
@@ -65,7 +68,7 @@ export async function runChatTurn(
 
   // Full conversation the model sees (system not stored in history).
   const messages: ConvoMessage[] = [
-    { role: 'system', content: `${APP_CONTEXT}\n\n${ASSISTANT}` },
+    { role: 'system', content: `${APP_CONTEXT}\n\n${ASSISTANT}\n\n${serverContext(server)}` },
     ...history,
     { role: 'user', content: userMessage },
   ];
@@ -73,8 +76,14 @@ export async function runChatTurn(
   let cmdN = 0;
 
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    // Abort only ever takes effect at a model-call boundary, so `newMessages`
+    // always ends on a complete assistant/tool pairing — handing it back keeps
+    // the conversation valid (every tool_call has its tool result) AND preserves
+    // the work done before the user hit stop.
+    if (signal?.aborted) return { ok: true, cancelled: true, messages: newMessages };
     emit({ type: 'status', phase: 'thinking' });
-    const r = await chatRaw(messages, { tools: [RUN_COMMAND] });
+    const r = await chatRaw(messages, { tools: [RUN_COMMAND], signal });
+    if (signal?.aborted) return { ok: true, cancelled: true, messages: newMessages };
     if (r.skipped) {
       return { ok: false, skipped: true, error: 'AI not configured', messages: newMessages };
     }
@@ -102,6 +111,17 @@ export async function runChatTurn(
       cmdN++;
       const { purpose, bash } = parseArgs(call.function.arguments);
       emit({ type: 'cmd', n: cmdN, purpose, bash });
+
+      // Cancelled mid-batch: don't run, but still answer the tool_call so the
+      // assistant message stays paired (an unanswered tool_call breaks the next
+      // request). The top-of-loop check then ends the turn.
+      if (signal?.aborted) {
+        emit({ type: 'output', n: cmdN, exitCode: null, stdout: '', stderr: '', rejected: 'cancelled' });
+        const toolMsg: ConvoMessage = { role: 'tool', tool_call_id: call.id, content: 'CANCELLED — not run (user stopped the turn)' };
+        messages.push(toolMsg);
+        newMessages.push(toolMsg);
+        continue;
+      }
 
       const rejection = denylistReason(bash);
       if (rejection) {
@@ -134,6 +154,7 @@ export async function runChatTurn(
   }
 
   // Budget exhausted — force a final reply with no tools available.
+  if (signal?.aborted) return { ok: true, cancelled: true, messages: newMessages };
   emit({ type: 'status', phase: 'thinking' });
   messages.push({ role: 'user', content: 'Command limit reached. Summarise what you found and what was done.' });
   const final = await chatRaw(messages);
@@ -144,6 +165,20 @@ export async function runChatTurn(
 }
 
 // --- helpers ---------------------------------------------------------------
+
+/**
+ * Per-target system-prompt section: the concrete box this session is wired to,
+ * plus the optional `ai:` note from its server YAML (e.g. "runs Docker") so the
+ * model targets the right tooling without the user re-explaining every time.
+ */
+function serverContext(server: ServerConfig): string {
+  const lines = [
+    'TARGET SERVER (every run_command runs here, over SSH):',
+    `- ${server.name} — host ${server.host}, SSH user ${server.user}.`,
+  ];
+  if (server.aiContext) lines.push(`- ${server.aiContext.replace(/\n/g, '\n  ')}`);
+  return lines.join('\n');
+}
 
 function parseArgs(raw: string): { purpose: string; bash: string } {
   try {

@@ -50,6 +50,8 @@ function ChatItemRow({ item, runningN }: { item: ChatItem; runningN: number | nu
       return <CmdBlock item={item} running={item.n === runningN} />;
     case 'output':
       return <OutputBlock item={item} />;
+    case 'notice':
+      return <div className="chat-row notice">{item.text}</div>;
     case 'error':
       return <div className="chat-row error">{item.text}</div>;
   }
@@ -72,7 +74,7 @@ type Props = {
 };
 
 export function ChatSession({ target, seedMessage }: Props) {
-  const { items, busy, phase, sendMessage } = useChat(target);
+  const { items, busy, phase, sendMessage, cancel } = useChat(target);
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const seededRef = useRef(false);
@@ -150,13 +152,15 @@ export function ChatSession({ target, seedMessage }: Props) {
           onKeyDown={onKey}
           disabled={busy}
         />
-        <button
-          className="chat-send"
-          onClick={submit}
-          disabled={!input.trim() || busy}
-        >
-          {busy ? '…' : '▶'}
-        </button>
+        {busy ? (
+          <button className="chat-send stop" onClick={cancel} title="Stop the AI">
+            ■
+          </button>
+        ) : (
+          <button className="chat-send" onClick={submit} disabled={!input.trim()}>
+            ▶
+          </button>
+        )}
       </div>
     </div>
   );

@@ -4,6 +4,12 @@ defaults:
   user: root
   key:  ~/.ssh/id_ed25519
 servers:
-  - { id: proxmox,    host: 192.168.1.215 }
-  - { id: plex,       host: 192.168.1.36  }
-  - { id: linux-isos, host: 192.168.1.225 }
+  - id:   proxmox
+    host: 192.168.1.215
+    ai:   Proxmox VE home server. Hosts the other services as LXC containers; manage them with pct/qm.
+  - id:   plex
+    host: 192.168.1.36
+    ai:   Proxmox LXC running a docker-compose stack that includes Plex. Inspect services with docker compose / docker.
+  - id:   linux-isos
+    host: 192.168.1.225
+    ai:   Proxmox LXC running a docker-compose stack with the *arr suite (Sonarr, Radarr) and associated download clients. Inspect services with docker compose / docker.

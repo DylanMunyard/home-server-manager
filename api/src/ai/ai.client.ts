@@ -75,7 +75,7 @@ function unconfigured(): true {
  */
 export async function chatRaw(
   messages: ConvoMessage[],
-  opts?: { tools?: ToolDef[]; maxCompletionTokens?: number },
+  opts?: { tools?: ToolDef[]; maxCompletionTokens?: number; signal?: AbortSignal },
 ): Promise<RawResult> {
   const cfg = loadAiConfig();
   if (!cfg.enabled) return unconfigured() && { ok: false, skipped: true };
@@ -102,6 +102,7 @@ export async function chatRaw(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'api-key': cfg.apiKey },
       body: JSON.stringify(payload),
+      signal: opts?.signal,
     });
 
     if (!res.ok) {
