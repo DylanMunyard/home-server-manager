@@ -1,6 +1,6 @@
 import type { NodeSnapshot, Thresholds } from '../shared/api.ts';
 import { MetricChart } from './MetricChart.tsx';
-import { cpuSeries, memSeries, tempSeries, latest, mountsOf, pct } from './series.ts';
+import { cpuSeries, memSeries, tempSeries, latest, mountsOf, pathsOf, pct } from './series.ts';
 
 const SPARK_H = 34;
 
@@ -32,6 +32,7 @@ export function MetricTile({ node, thresholds, onExpand, onBrowse }: {
   const last = latest(node);
   const memPct = last ? pct(last.mem.used, last.mem.total) : 0;
   const mounts = mountsOf(node);
+  const watched = pathsOf(node);
 
   // The tile is no longer a single button: the head + sparks expand to the node
   // detail, while each disk bar is its own button that opens the file browser at
@@ -96,6 +97,19 @@ export function MetricTile({ node, thresholds, onExpand, onBrowse }: {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* du-monitored dirs — no capacity ⇒ no track/threshold, just GiB used.
+          Each row browses the directory, same as the disk bars above. */}
+      {watched.length > 0 && (
+        <div className="mtile-disks mtile-paths">
+          {watched.map((p) => (
+            <button className="mbar-row" key={p.label} onClick={() => onBrowse(node.id, p.path)} title={`Browse ${p.path}`}>
+              <span className="mbar-label">{p.label}</span>
+              <span className="mbar-val">{p.used === null ? '—' : `${p.used.toFixed(1)}G`}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

@@ -13,11 +13,13 @@
 # params:
 #   METRICS_INTERVAL: { label: "Sample interval (seconds)", default: "5" }
 #   METRICS_MOUNTS:   { label: "Disk mounts ('auto' or space-separated list)", default: "auto" }
+#   METRICS_PATHS:    { label: "du-monitored dirs, one 'label=path' per line", default: "" }
 
 set -euo pipefail
 
 interval="${METRICS_INTERVAL:-5}"
 mounts_req="${METRICS_MOUNTS:-auto}"   # "auto" = every real FS; else explicit list
+paths_req="${METRICS_PATHS:-}"         # newline-separated "label=path" lines
 ncpu="$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)"
 
 # /proc/stat aggregate → "<total_jiffies> <idle_jiffies>" (idle includes iowait)
@@ -69,9 +71,48 @@ disk_json() {
     '
 }
 
+# JSON array of {label,path,used} for each METRICS_PATHS dir — directories (k3s
+# local-path PVCs etc.), not mounts, so df can't see them and there's no
+# capacity: `used` is du GiB only, or null when the dir is missing/unreadable
+# (kept visible rather than silently dropped). du over a big tree is too
+# expensive for every tick, so the loop calls this every PATHS_EVERY ticks and
+# carries the cached value into the samples in between. du -sk, not -sb: -k is
+# POSIX, -b is GNU-only.
+paths_json="[]"
+sample_paths() {
+    [ -z "$paths_req" ] && { paths_json="[]"; return 0; }
+    local out="[" sep="" line label p kb gib
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        label="${line%%=*}"; p="${line#*=}"
+        # du exits nonzero when any subdir is unreadable but still prints a
+        # valid (partial) total — so key off the output, and swallow the exit
+        # status (`|| true`) or `set -e`/pipefail would kill the stream.
+        kb="$({ du -sk -- "$p" 2>/dev/null || true; } | awk '{print $1; exit}')"
+        if [ -n "$kb" ]; then
+            gib="$(awk -v k="$kb" 'BEGIN{printf "%.2f", k/1048576}')"
+        else
+            gib="null"
+        fi
+        out="${out}${sep}{\"label\":\"${label}\",\"path\":\"${p}\",\"used\":${gib}}"
+        sep=","
+    done <<EOF
+$paths_req
+EOF
+    paths_json="$out]"
+    return 0
+}
+
+PATHS_EVERY=12   # du cadence in ticks (≈60s at the default 5s interval)
+tick=0
+
 read -r prev_total prev_idle < <(cpu_totals)
 
 while true; do
+    # Tick 0 runs before the first emit so the first sample has real path data.
+    if [ $((tick % PATHS_EVERY)) -eq 0 ]; then sample_paths; fi
+    tick=$((tick + 1))
+
     sleep "$interval"
 
     # CPU% across the interval just elapsed.
@@ -90,6 +131,6 @@ while true; do
     temp="$(hottest_temp || true)"
     [ -z "$temp" ] && temp="null"
 
-    printf '{"ts":%s,"cpu":%s,"ncpu":%s,"load":[%s,%s,%s],"mem":{"used":%s,"total":%s},"temp":%s,"disk":%s}\n' \
-        "$(date +%s)" "$cpu" "$ncpu" "$l1" "$l5" "$l15" "$mem_used_mib" "$mem_total_mib" "$temp" "$(disk_json)"
+    printf '{"ts":%s,"cpu":%s,"ncpu":%s,"load":[%s,%s,%s],"mem":{"used":%s,"total":%s},"temp":%s,"disk":%s,"paths":%s}\n' \
+        "$(date +%s)" "$cpu" "$ncpu" "$l1" "$l5" "$l15" "$mem_used_mib" "$mem_total_mib" "$temp" "$(disk_json)" "$paths_json"
 done

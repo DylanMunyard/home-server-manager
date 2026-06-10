@@ -206,6 +206,11 @@ mounts: auto                # 'auto' itemises every real FS; or pin [/, /mnt/dat
 retention: 2h               # ring-buffer window (s/m/h or bare seconds)
 thresholds: { cpu: 90, mem: 90, disk: 85, temp: 80 }  # tile-colour only
 nodes: all                  # or a list of <group>/<server> ids
+paths:                      # du-sampled dirs per node (non-mounts df can't see)
+  hetzner/bfstats: { neo4j: /var/lib/rancher/k3s/storage/pvc-..._neo4j-pvc }
+inspect:                    # drill-down runbooks in the node detail view
+  default: [top-cpu]
+  hetzner/bfstats: [top-cpu, k3s-top]
 ```
 
 - **Zero-install probe.** `config/scripts/metrics-stream.sh` is a normal runbook
@@ -229,6 +234,27 @@ nodes: all                  # or a list of <group>/<server> ids
   `sample`/`status` events. Both are auth-gated by the global guard. The UI
   (`useMetrics`) caps its own copy to the same window. One shared collector
   feeds every tab/device — opening the dashboard doesn't open new connections.
+- **`paths:` = du-sampled directories** (per node, label → absolute path) for
+  dirs that are *not* mounts — e.g. k3s local-path-provisioner PVCs — so the
+  `df` pass can't itemise them. No capacity exists (local-path PVCs aren't
+  quota'd) ⇒ samples carry **absolute GiB used only** (`paths: [{label, path,
+  used}]`), charted on an autoscaled axis, no threshold. `used: null` marks a
+  missing/unreadable dir (kept visible, like `temp: null`). du is expensive, so
+  the probe samples paths every 12th tick (≈60 s at the default interval) —
+  incl. tick 0 — and carries the cached value into the samples in between; a du
+  over a huge tree can delay that one sample, never kill the stream. Labels are
+  restricted to `A-Za-z0-9._-` by the loader (they travel raw inside the
+  `label=path` prelude lines and the probe's printf-built JSON — that check is
+  the only sanitisation, keep it). The prelude is per-node (`METRICS_PATHS`).
+- **`inspect:` = drill-down runbooks** shown as buttons in a node's detail view
+  ("what's eating CPU right now?"). Each id is an ordinary runbook in
+  `config/scripts/` — that's the plugin system: a new probe is just a new
+  script (it'll also appear in the runbook console; intended). A node's list
+  **replaces** `default`; unknown runbook/node ids warn + drop (same lenient
+  stance as `nodes:`). Runs go over the existing auth-gated `/ws/run` +
+  `useSshStream` + `Terminal` — zero bespoke exec plumbing (`InspectPanel` in
+  `ui/src/metrics/`). Ships with `top-cpu` (ps by cpu/mem) and `k3s-top`
+  (kubectl top, degrades when metrics-server is absent).
 - **Charts are visx** (D3 scales/shapes as React primitives) styled to the
   brutalist tokens — thin ink line, flat accent fill, monospace ticks, no
   gradients/shadows. `MetricChart` has `spark` (tile) and `full` (axed detail)

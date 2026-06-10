@@ -734,6 +734,9 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .mbar-fill { display: block; height: 100%; background: var(--accent); }
 .mbar-fill[data-over="true"] { background: var(--err); }
 .mbar-val { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+/* du-monitored path rows: label + GiB only — no capacity, so no track. */
+.mtile-paths { margin-top: 6px; }
+.mtile-paths .mbar-row { grid-template-columns: 1fr auto; }
 
 /* ── File browser (drill into a disk's usage) ───────────────────── */
 .fbrowser { display: flex; flex-direction: column; }
@@ -809,6 +812,20 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .ndchart-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-2); }
 .ndchart-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* Inspect drill-down (run a configured runbook, stream into a bounded box) */
+.nd-inspect { margin-top: 18px; border: 1px solid var(--line-soft); padding: 10px 12px 12px; }
+.nd-inspect-h { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.nd-inspect-status { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.nd-inspect-status[data-state="running"], .nd-inspect-status[data-state="connecting"] { color: var(--accent-2, var(--ink)); }
+.nd-inspect-status[data-state="failed"] { color: var(--err); }
+.nd-inspect-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.nd-inspect-btn { padding: 5px 12px; font-size: 12px; }
+.nd-inspect-btn:disabled { opacity: 0.5; cursor: default; }
+.nd-inspect-cancel { color: var(--err); }
+/* Bounded box — the base .terminal-wrap has no height of its own, and xterm
+ * needs a real layout box to initialise into. */
+.nd-inspect .terminal-wrap { height: 300px; }
+
 /* ── Confirm dialog (shared; manual-run guard for `confirm:` runbooks) ── */
 .confirm-back { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: grid; place-items: center; z-index: 60; }
 .confirm-box { background: var(--bg); border: 1.5px solid var(--ink); padding: 20px 22px; max-width: 440px; width: calc(100% - 40px); }
@@ -831,6 +848,8 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .m-app .dash { --ink: var(--m-ink); --ink-2: var(--m-ink-2); --ink-3: var(--m-ink-3); --line: var(--m-line); --line-soft: var(--m-line-soft); --err: var(--m-err); --ok: var(--m-ok); --bg: var(--m-paper); --bg-2: var(--m-paper-2); }
 .m-app .dash-grid { grid-template-columns: 1fr; }
 .m-app .nodedetail-charts { grid-template-columns: 1fr; }
+/* Fixed-height inline terminal keeps the dash's native page scroll. */
+.m-app .nd-inspect .terminal-wrap { height: 240px; }
 /* File browser inherits the cream palette from .m-app .dash; tighten the row
  * grid for narrow screens (hide the %-bar + age, keep name + size). */
 .m-app .fb-row-main { grid-template-columns: 1fr auto; gap: 10px; }

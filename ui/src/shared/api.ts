@@ -126,8 +126,13 @@ export type Job = {
 };
 
 // ── Live dashboard metrics ──────────────────────────────────────
-// Mirror of api/src/metrics/metrics.types.ts.
+// Mirror of api/src/metrics/metrics.types.ts. The newer fields (`paths`,
+// `inspect`) stay optional here: a tab older/newer than the API can hold
+// mixed-shape samples, so the UI treats them as possibly absent.
 export type DiskSample = { mount: string; used: number; total: number }; // GiB
+// du-sampled dir — no capacity (plain dir, not a mount): GiB used only,
+// null = missing/unreadable.
+export type PathSample = { label: string; path: string; used: number | null };
 export type MetricSample = {
   ts: number;                       // unix seconds
   cpu: number;                      // %
@@ -136,8 +141,11 @@ export type MetricSample = {
   mem: { used: number; total: number }; // MiB
   temp: number | null;              // hottest °C, null if no sensors
   disk: DiskSample[];
+  paths?: PathSample[];
 };
 export type NodeStatus = 'connecting' | 'live' | 'down';
+// A drill-down runbook offered in the node detail (dashboard `inspect:`).
+export type InspectAction = { id: string; description: string };
 export type NodeSnapshot = {
   id: string;
   name: string;
@@ -146,6 +154,7 @@ export type NodeSnapshot = {
   status: NodeStatus;
   lastError?: string;
   samples: MetricSample[];
+  inspect?: InspectAction[];
 };
 export type Thresholds = { cpu: number; mem: number; disk: number; temp: number };
 export type DashboardMeta = { interval: number; retentionSec: number; thresholds: Thresholds };

@@ -20,6 +20,7 @@ const RECONNECT_MS = 5_000;
 type Node = {
   meta: DashboardNode;
   server: ServerConfig;
+  script: string;          // probe + per-node prelude (METRICS_PATHS differs per node)
   status: NodeStatus;
   lastError?: string;
   samples: MetricSample[];
@@ -27,7 +28,6 @@ type Node = {
 };
 
 let config: DashboardConfig | null = null;
-let probeScript: string | null = null;
 let maxSamples = 0;
 let running = false;
 const nodes = new Map<string, Node>();
@@ -46,9 +46,9 @@ function setStatus(node: Node, status: NodeStatus, lastError?: string) {
 }
 
 function connect(node: Node) {
-  if (!running || !probeScript) return;
+  if (!running) return;
   setStatus(node, 'connecting');
-  node.handle = streamMetrics(node.server, probeScript, {
+  node.handle = streamMetrics(node.server, node.script, {
     onSample: (sample) => {
       if (node.status !== 'live') setStatus(node, 'live');
       node.samples.push(sample);
@@ -79,6 +79,7 @@ export function getSnapshot(): MetricsSnapshot {
     status: n.status,
     lastError: n.lastError,
     samples: n.samples,
+    inspect: n.meta.inspect,
   }));
   return { meta, nodes: nodeSnaps };
 }
@@ -104,10 +105,6 @@ export async function startCollector(): Promise<void> {
     console.warn(`[dashboard] runbook '${PROBE_RUNBOOK}' not found — collector idle`);
     return;
   }
-  probeScript = exportPrelude({
-    METRICS_INTERVAL: String(config.interval),
-    METRICS_MOUNTS: config.mounts,
-  }) + probe.contents;
 
   const { servers } = await loadAll();
   const byId = new Map(servers.map((s) => [s.id, s]));
@@ -116,7 +113,15 @@ export async function startCollector(): Promise<void> {
   for (const meta of config.nodes) {
     const server = byId.get(meta.id);
     if (!server) continue; // loader already resolved these, but stay defensive
-    const node: Node = { meta, server, status: 'connecting', samples: [], handle: null };
+    // The prelude is per-node: METRICS_PATHS carries that node's du-monitored
+    // dirs as newline-separated `label=path` lines (newline-safe — shellQuote
+    // single-quotes the value).
+    const script = exportPrelude({
+      METRICS_INTERVAL: String(config.interval),
+      METRICS_MOUNTS: config.mounts,
+      METRICS_PATHS: meta.paths.map((p) => `${p.label}=${p.path}`).join('\n'),
+    }) + probe.contents;
+    const node: Node = { meta, server, script, status: 'connecting', samples: [], handle: null };
     nodes.set(meta.id, node);
     connect(node);
   }

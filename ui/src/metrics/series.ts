@@ -1,4 +1,4 @@
-import type { MetricSample, NodeSnapshot } from '../shared/api.ts';
+import type { MetricSample, NodeSnapshot, PathSample } from '../shared/api.ts';
 import type { Point } from './MetricChart.tsx';
 
 // Turn a node's raw samples into the per-metric Point series the charts plot.
@@ -24,8 +24,21 @@ export const diskSeries = (s: MetricSample[], mount: string): Point[] =>
     })
     .filter((p): p is Point => p !== null);
 
+// du-monitored dir usage in GiB (absolute — no capacity to pct against).
+// Skips samples where the label is absent or unreadable (used === null).
+export const pathSeries = (s: MetricSample[], label: string): Point[] =>
+  s
+    .map((d) => {
+      const p = (d.paths ?? []).find((x) => x.label === label);
+      return p && p.used !== null ? { x: d.ts * 1000, y: p.used } : null;
+    })
+    .filter((p): p is Point => p !== null);
+
 export const latest = (n: NodeSnapshot): MetricSample | null =>
   n.samples.length ? n.samples[n.samples.length - 1] : null;
 
 // Mounts present in the most recent sample (drives the disk rows/charts).
 export const mountsOf = (n: NodeSnapshot): string[] => latest(n)?.disk.map((d) => d.mount) ?? [];
+
+// du-monitored paths in the most recent sample (drives the path rows/charts).
+export const pathsOf = (n: NodeSnapshot): PathSample[] => latest(n)?.paths ?? [];

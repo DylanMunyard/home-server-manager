@@ -17,3 +17,19 @@ thresholds:
 
 nodes: all              # "all" watches every configured server, or a list of
                         # <group>/<server> ids, e.g. [bethany/proxmox, pi-town/pi1]
+
+# du-sampled directories per node — for dirs that aren't mounts (k3s local-path
+# PVCs etc.) so df can't itemise them. No capacity → charts show absolute GiB
+# used. Sampled every 12th tick (du is expensive); the cached value rides along
+# in between. label → absolute path; labels: A-Za-z0-9._- only.
+paths:
+  hetzner/bfstats:
+    neo4j:      /var/lib/rancher/k3s/storage/pvc-2990ca0b-7a1d-4315-b912-256e470a13ca_bf42-stats_neo4j-pvc
+    bf42-stats: /var/lib/rancher/k3s/storage/pvc-fd8f2b34-a915-4ee8-8272-dd9ce2939d56_bf42-stats_bf42-stats-pvc
+
+# Drill-down buttons in the node detail — each id is a runbook in
+# config/scripts/ (that's the plugin system: new probe = new script).
+# A node's list REPLACES `default` (repeat entries you want to keep).
+inspect:
+  default: [top-cpu]
+  hetzner/bfstats: [top-cpu, k3s-top]

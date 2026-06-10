@@ -1,6 +1,7 @@
 import type { NodeSnapshot, Thresholds } from '../shared/api.ts';
 import { MetricChart, type Point } from './MetricChart.tsx';
-import { cpuSeries, memSeries, tempSeries, diskSeries, latest, mountsOf, pct } from './series.ts';
+import { InspectPanel } from './InspectPanel.tsx';
+import { cpuSeries, memSeries, tempSeries, diskSeries, pathSeries, latest, mountsOf, pathsOf, pct } from './series.ts';
 
 const FULL_H = 150;
 
@@ -68,7 +69,20 @@ export function NodeDetail({ node, thresholds, onClose }: {
               />
             );
           })}
+          {/* du-monitored dirs — no capacity, so absolute GiB on an autoscaled axis. */}
+          {pathsOf(node).map((p) => (
+            <Chart
+              key={p.label}
+              title={`path ${p.label}`}
+              value={p.used === null ? 'unreadable' : `${p.used.toFixed(1)} GiB`}
+              data={pathSeries(node.samples, p.label)}
+            />
+          ))}
         </div>
+      )}
+
+      {(node.inspect ?? []).length > 0 && (
+        <InspectPanel serverId={node.id} actions={node.inspect!} />
       )}
     </div>
   );
