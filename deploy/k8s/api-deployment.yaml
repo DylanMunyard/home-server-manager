@@ -62,6 +62,14 @@ spec:
             - name: jobs-config
               mountPath: /config/jobs
               readOnly: true
+            # dashboard.yaml sits at the config root (not in a subdir), so it
+            # mounts as a single file via subPath. No live ConfigMap refresh
+            # with subPath, but the pipeline rollout-restarts on config changes
+            # anyway.
+            - name: dashboard-config
+              mountPath: /config/dashboard.yaml
+              subPath: dashboard.yaml
+              readOnly: true
             - name: ssh-keys
               mountPath: /home/app/.ssh
               readOnly: true
@@ -89,6 +97,9 @@ spec:
         - name: jobs-config
           configMap:
             name: home-server-mgr-jobs
+        - name: dashboard-config
+          configMap:
+            name: home-server-mgr-dashboard
         - name: ssh-keys
           secret:
             secretName: home-server-mgr-ssh

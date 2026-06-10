@@ -117,6 +117,9 @@ pipeline {
                     kubectl -n home-server-mgr create configmap home-server-mgr-jobs \
                       --from-file=config/jobs/ \
                       --dry-run=client -o yaml | kubectl apply -f -
+                    kubectl -n home-server-mgr create configmap home-server-mgr-dashboard \
+                      --from-file=config/dashboard.yaml \
+                      --dry-run=client -o yaml | kubectl apply -f -
 
                     # Apply manifests (idempotent — first run creates, later runs no-op when unchanged).
                     kubectl apply -f deploy/k8s/api-deployment.yaml
