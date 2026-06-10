@@ -33,3 +33,13 @@ paths:
 inspect:
   default: [top-cpu]
   hetzner/bfstats: [top-cpu, k3s-top]
+
+# Rich per-node panels in the detail view. Map of node id → panel ids; the
+# only panel today is `k3s` (workload cpu/mem via the k8s API over an SSH
+# tunnel, streamed while the panel is open — nothing always-on). Unknown ids
+# warn + drop. Enable on the node that holds the kubeconfig (the control
+# plane) — the data is cluster-wide, so one node per cluster is enough.
+panels:
+  hetzner/bfstats: [k3s]
+  bethany/proxmox: [k3s]
+  pi-town/master: [k3s]

@@ -35,6 +35,7 @@ export type NodeSnapshot = {
   lastError?: string;
   samples: MetricSample[];
   inspect: InspectAction[];  // static config — carried by the snapshot frame only
+  panels: string[];          // static config — rich detail panels (e.g. 'k3s')
 };
 
 export type Thresholds = { cpu: number; mem: number; disk: number; temp: number };

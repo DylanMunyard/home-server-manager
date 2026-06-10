@@ -80,6 +80,7 @@ export function getSnapshot(): MetricsSnapshot {
     lastError: n.lastError,
     samples: n.samples,
     inspect: n.meta.inspect,
+    panels: n.meta.panels,
   }));
   return { meta, nodes: nodeSnaps };
 }

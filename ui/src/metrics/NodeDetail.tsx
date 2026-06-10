@@ -1,6 +1,7 @@
 import type { NodeSnapshot, Thresholds } from '../shared/api.ts';
 import { MetricChart, type Point } from './MetricChart.tsx';
 import { InspectPanel } from './InspectPanel.tsx';
+import { K8sPanel } from './K8sPanel.tsx';
 import { cpuSeries, memSeries, tempSeries, diskSeries, pathSeries, latest, mountsOf, pathsOf, pct } from './series.ts';
 
 const FULL_H = 150;
@@ -79,6 +80,10 @@ export function NodeDetail({ node, thresholds, onClose }: {
             />
           ))}
         </div>
+      )}
+
+      {(node.panels ?? []).includes('k3s') && (
+        <K8sPanel serverId={node.id} thresholds={thresholds} />
       )}
 
       {(node.inspect ?? []).length > 0 && (

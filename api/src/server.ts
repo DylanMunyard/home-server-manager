@@ -13,6 +13,7 @@ import { alertsRoutes } from './alerts/alerts.routes.js';
 import { metricsRoutes } from './metrics/metrics.routes.js';
 import { startCollector } from './metrics/metrics.collector.js';
 import { filesRoutes } from './files/files.routes.js';
+import { k8sRoutes } from './k8s/k8s.routes.js';
 import { aiRoutes } from './ai/ai.routes.js';
 
 const app = Fastify({ logger: true });
@@ -32,6 +33,7 @@ await app.register(jobsRoutes);
 await app.register(alertsRoutes);
 await app.register(metricsRoutes);
 await app.register(filesRoutes);
+await app.register(k8sRoutes);
 await app.register(aiRoutes);
 
 app.get('/api/health', async () => ({ ok: true }));

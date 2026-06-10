@@ -155,6 +155,7 @@ export type NodeSnapshot = {
   lastError?: string;
   samples: MetricSample[];
   inspect?: InspectAction[];
+  panels?: string[];
 };
 export type Thresholds = { cpu: number; mem: number; disk: number; temp: number };
 export type DashboardMeta = { interval: number; retentionSec: number; thresholds: Thresholds };
@@ -274,6 +275,48 @@ export type ChatEvent =
   | { type: 'cmd'; n: number; purpose: string; bash: string }
   | { type: 'output'; n: number; exitCode: number | null; stdout: string; stderr: string; rejected?: string }
   | { type: 'done'; ok: boolean; cancelled?: boolean; error?: string; messages: ConvoMessage[] };
+
+// ── k3s panel ───────────────────────────────────────────────────
+// Mirror of api/src/k8s/k8s.types.ts — streamed over /ws/k8s/workloads while
+// the panel is open (one SSH session per connection; progressive events).
+export type K8sWorkload = {
+  kind: string;          // Deployment | StatefulSet | DaemonSet | Job | CronJob | Pod | ...
+  name: string;
+  namespace: string;
+  pods: number;          // active pods
+  ready: number;         // fully-ready running pods
+  restarts: number;
+  cpuM: number | null;   // millicores; null = no metrics-server
+  memMi: number | null;
+};
+export type K8sPod = {
+  name: string;
+  namespace: string;
+  phase: string;
+  ready: number;
+  total: number;
+  restarts: number;
+  ageSec: number;
+  cpuM: number | null;
+  memMi: number | null;
+};
+export type K8sSnapshot = {
+  fetchedAt: number;
+  durationMs: number;
+  alloc: { cpuM: number; memMi: number } | null;  // bar denominator (% of node)
+  metricsAvailable: boolean;
+  workloads: K8sWorkload[];
+  pods: K8sPod[];        // all namespaces — filtered client-side
+};
+
+// Streaming events from /ws/k8s/workloads. Within each fetch cycle:
+// `alloc`/`structure` land as those API calls resolve (fast first paint),
+// then the authoritative `snapshot`; cycles repeat ~20s on the held session.
+export type K8sStreamEvent =
+  | { type: 'alloc'; alloc: K8sSnapshot['alloc'] }
+  | { type: 'structure'; workloads: K8sWorkload[]; pods: K8sPod[] }
+  | { type: 'snapshot'; snapshot: K8sSnapshot }
+  | { type: 'error'; message: string };
 
 // ── File browser ────────────────────────────────────────────────
 // Mirror of api/src/files/files.types.ts.

@@ -24,6 +24,7 @@ export type DashboardNode = {
   id: string; name: string; group: string; host: string;
   paths: WatchedPath[];        // du-sampled dirs (METRICS_PATHS prelude)
   inspect: InspectAction[];    // drill-down runbooks for the detail view
+  panels: string[];            // rich detail-view panels (e.g. 'k3s')
 };
 
 export type DashboardConfig = {
@@ -42,7 +43,11 @@ type RawDashboard = {
   nodes?: 'all' | string[];
   paths?: Record<string, Record<string, string>>;  // node id → label → abs path
   inspect?: Record<string, string[]>;              // 'default' + node-id keys → runbook ids
+  panels?: Record<string, string[]>;               // node id → panel ids
 };
+
+// Panel ids the UI knows how to render — anything else is a config typo.
+const KNOWN_PANELS = new Set(['k3s']);
 
 // Labels travel raw inside the probe's `label=path` prelude lines and its
 // printf-built JSON — this charset check is the only sanitisation, keep it.
@@ -90,7 +95,7 @@ export async function loadDashboardConfig(): Promise<DashboardConfig> {
   const { groups, servers } = await loadAll();
   const groupName = (id: string) => groups.find((g) => g.id === id)?.name ?? id;
   const allNodes: DashboardNode[] = servers.map((s) => ({
-    id: s.id, name: s.name, group: groupName(s.groupId), host: s.host, paths: [], inspect: [],
+    id: s.id, name: s.name, group: groupName(s.groupId), host: s.host, paths: [], inspect: [], panels: [],
   }));
 
   let raw: RawDashboard = {};
@@ -123,6 +128,21 @@ export async function loadDashboardConfig(): Promise<DashboardConfig> {
       continue;
     }
     n.paths = resolvePaths(id, entries);
+  }
+
+  // Rich detail-view panels — node id → panel ids, validated against the set
+  // the UI can render (warn + drop, same lenient stance as `paths:` above).
+  for (const [id, ids] of Object.entries(raw.panels ?? {})) {
+    const n = watched.get(id);
+    if (!n) {
+      console.warn(`[dashboard] panels for unknown node '${id}' — skipping`);
+      continue;
+    }
+    n.panels = (Array.isArray(ids) ? ids : []).map(String).filter((p) => {
+      if (KNOWN_PANELS.has(p)) return true;
+      console.warn(`[dashboard] unknown panel '${p}' (${id}) — skipping`);
+      return false;
+    });
   }
 
   // Drill-down runbooks — a node's list replaces `default`. Unknown runbook

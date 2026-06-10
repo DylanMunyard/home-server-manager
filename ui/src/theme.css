@@ -826,6 +826,61 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
  * needs a real layout box to initialise into. */
 .nd-inspect .terminal-wrap { height: 300px; }
 
+/* ── k3s panel (rich workload drill-in, dashboard `panels:`) ────── */
+.k8s-panel { margin-top: 18px; border: 1px solid var(--line-soft); padding: 10px 12px 12px; }
+.k8s-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.k8s-title { display: flex; align-items: center; gap: 10px; }
+.k8s-meta { display: flex; align-items: center; gap: 10px; }
+.k8s-fresh { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.k8s-live { font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-3); }
+.k8s-live[data-live="true"] { color: var(--ok); }
+.k8s-refresh { padding: 4px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+.k8s-refresh:disabled { opacity: 0.5; cursor: default; }
+.k8s-sort { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.k8s-msg { padding: 10px 0; color: var(--ink-3); font-size: 12px; }
+.k8s-msg-err { color: var(--err); }
+
+.k8s-list { display: flex; flex-direction: column; }
+/* One workload: kind | name+ns stacked | cpu metric | mem metric | health.
+ * Every column is fixed except the name, so rows align into real columns. */
+.k8s-row {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) 150px 150px 56px;
+  gap: 12px; align-items: center; width: 100%; text-align: left; cursor: pointer;
+  background: transparent; border: 0; border-radius: 0; border-bottom: 1px solid var(--line-soft);
+  padding: 7px 4px; font-size: 12.5px; color: inherit;
+}
+.k8s-row:hover { background: var(--bg-2); color: inherit; }
+/* One pod (ns view): name+status stacked | cpu metric | mem metric | age */
+.k8s-pods-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 150px 150px 40px;
+  gap: 12px; align-items: center; border-bottom: 1px solid var(--line-soft);
+  padding: 7px 4px; font-size: 12.5px;
+}
+.k8s-kind {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 2px 6px; border: 1px solid currentColor; color: var(--ink-2);
+  justify-self: start;
+}
+.k8s-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.k8s-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k8s-sub { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-3); }
+/* The metric cell: small label + prominent value, thin comparator bar under
+ * (scaled to the biggest consumer in view; red = hot vs the node itself). */
+.k8s-m { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.k8s-m-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.k8s-m-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-3); }
+.k8s-m-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.k8s-m-track { display: block; height: 5px; background: var(--bg-2); border: 1px solid var(--line-soft); }
+.k8s-m-fill { display: block; height: 100%; background: var(--accent); }
+.k8s-m-fill[data-over="true"] { background: var(--err); }
+.k8s-health { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.k8s-ready { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.k8s-ready[data-bad="true"] { color: var(--err); font-weight: 700; }
+.k8s-restarts { font-size: 11px; color: var(--ink-3); }
+.k8s-restarts[data-some="true"] { color: var(--err); }
+.k8s-age { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-3); text-align: right; }
+.k8s-phase { font-size: 9px; padding: 1px 5px; }
+
 /* ── Confirm dialog (shared; manual-run guard for `confirm:` runbooks) ── */
 .confirm-back { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: grid; place-items: center; z-index: 60; }
 .confirm-box { background: var(--bg); border: 1.5px solid var(--ink); padding: 20px 22px; max-width: 440px; width: calc(100% - 40px); }
@@ -854,6 +909,12 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
  * grid for narrow screens (hide the %-bar + age, keep name + size). */
 .m-app .fb-row-main { grid-template-columns: 1fr auto; gap: 10px; }
 .m-app .fb-bar-track, .m-app .fb-age { display: none; }
+/* k3s panel on a narrow column: drop the kind chip + health/age columns and
+ * tighten the metric cells — name and the two prominent values survive. */
+.m-app .k8s-row { grid-template-columns: minmax(0, 1fr) 76px 76px; gap: 10px; }
+.m-app .k8s-row .k8s-kind, .m-app .k8s-row .k8s-health { display: none; }
+.m-app .k8s-pods-row { grid-template-columns: minmax(0, 1fr) 76px 76px; gap: 10px; }
+.m-app .k8s-pods-row .k8s-age { display: none; }
 .m-jntfy .nf.pri { border-style: solid; border-color: var(--m-line); background: var(--m-paper-2); }
 
 /* ── AI investigation transcript (desktop) ─────────────────────── */

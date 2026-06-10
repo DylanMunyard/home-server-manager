@@ -211,6 +211,8 @@ paths:                      # du-sampled dirs per node (non-mounts df can't see)
 inspect:                    # drill-down runbooks in the node detail view
   default: [top-cpu]
   hetzner/bfstats: [top-cpu, k3s-top]
+panels:                     # rich detail-view panels per node ('k3s' only today)
+  hetzner/bfstats: [k3s]
 ```
 
 - **Zero-install probe.** `config/scripts/metrics-stream.sh` is a normal runbook
@@ -255,6 +257,32 @@ inspect:                    # drill-down runbooks in the node detail view
   `useSshStream` + `Terminal` — zero bespoke exec plumbing (`InspectPanel` in
   `ui/src/metrics/`). Ships with `top-cpu` (ps by cpu/mem) and `k3s-top`
   (kubectl top, degrades when metrics-server is absent).
+- **`panels:` = rich detail-view panels** per node (map node id → panel ids,
+  validated against the known set — only `k3s` exists; enable it on the node
+  that holds the kubeconfig, i.e. the control plane — data is cluster-wide).
+  The k3s panel is the "what's eating CPU" workload visualisation: per-workload
+  CPU/mem (prominent values + comparator bars scaled to the biggest consumer in
+  view; red when hot vs node allocatable × the dashboard thresholds) with an
+  in-place click-through to a per-namespace pods table (a client-side filter of
+  the same payload — zero extra fetches). **Data path: no kubectl.**
+  `k8s.client.ts` SSHes in, reads the kubeconfig (k3s/kubectl/kubeadm/microk8s
+  paths), then port-forwards through the same SSH connection to the cluster API
+  and speaks HTTPS+mTLS directly. **Streaming, panel-scoped:** one
+  `/ws/k8s/workloads` connection per open panel holds one SSH session (connect
+  + kubeconfig paid once, NOT per refresh — load-bearing for distant hosts) and
+  loops ~20 s cycles: nodes/pods/metrics fetched in parallel, `alloc` +
+  `structure` events emitted as each lands (fast first paint), then the
+  authoritative `snapshot`; any client frame forces an immediate cycle; the UI
+  reconnects on a backoff and keeps the last good snapshot through errors.
+  Parsing/aggregation is `k8s.parse.ts` (pure, fixture-testable): pods grouped
+  by top-level owner (ReplicaSet→Deployment via pod-template-hash strip;
+  `name-<epoch>` Jobs→CronJob — documented heuristics) with an exact pod→
+  workload index for the metrics overlay (don't regress to name-prefix
+  matching). The route 403s for nodes without the panel (not an open k8s-API
+  proxy), is connection-scoped and fully wrapped (can't take down the API), and
+  degrades: metrics API absent ⇒ structure renders with `—` usage; cluster down
+  ⇒ inline error. No history/ring buffer by design. (A future SSH/kubectl
+  fallback may return for hosts where the kubeconfig/API path doesn't work.)
 - **Charts are visx** (D3 scales/shapes as React primitives) styled to the
   brutalist tokens — thin ink line, flat accent fill, monospace ticks, no
   gradients/shadows. `MetricChart` has `spark` (tile) and `full` (axed detail)
