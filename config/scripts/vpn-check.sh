@@ -7,6 +7,7 @@
 # and works the same whether run by the job or by hand. Override the match via
 # VPN_HOME_ISP (set it in .env + the job's `env:` block to keep it out of git).
 # Requires `jq` and `curl` on the target.
+# nodes: [ bethany/linux-isos ]
 set -euo pipefail
 
 HOME_ISP="${VPN_HOME_ISP:-Vocus}"

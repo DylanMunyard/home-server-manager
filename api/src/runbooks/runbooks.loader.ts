@@ -28,6 +28,11 @@ export type Runbook = {
    * run the script directly.
    */
   confirm?: string;
+  /**
+   * List of node IDs (or glob patterns) this runbook is intended for.
+   * If present, the UI hides it unless a matching node is selected.
+   */
+  nodes?: string[];
   filename: string;
   contents: string;
 };
@@ -223,6 +228,53 @@ function parseConfirm(contents: string): string | undefined {
   return undefined;
 }
 
+/**
+ * A top-level `# nodes:` YAML block in the header.
+ */
+function parseNodes(contents: string): string[] | undefined {
+  const lines = contents.split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  if (i < lines.length && lines[i].startsWith('#!')) i++;
+
+  let body: string[] = [];
+  for (; i < lines.length; i++) {
+    const m = /^\s*#\s?(.*)$/.exec(lines[i]);
+    if (!m) break;
+    body.push(m[1].trimEnd());
+  }
+
+  const start = body.findIndex((l) => /^nodes:\s*(.*)$/.test(l));
+  if (start === -1) return undefined;
+
+  const firstLineMatch = /^nodes:\s*(.*)$/.exec(body[start]);
+  const firstLineValue = firstLineMatch ? firstLineMatch[1].trim() : '';
+
+  if (firstLineValue && (firstLineValue.startsWith('[') || !firstLineValue.includes(':'))) {
+    try {
+      const val = YAML.parse(firstLineValue);
+      if (Array.isArray(val)) return val.map(String);
+      if (typeof val === 'string') return [val];
+    } catch { /* fall through to block parse */ }
+  }
+
+  const block = [body[start]];
+  for (let k = start + 1; k < body.length; k++) {
+    const l = body[k];
+    if (l === '' || /^\s/.test(l)) block.push(l);
+    else break;
+  }
+
+  try {
+    const doc = YAML.parse(block.join('\n'));
+    if (Array.isArray(doc.nodes)) return doc.nodes.map(String);
+    if (typeof doc.nodes === 'string') return [doc.nodes];
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 function parseRunbook(id: string, filename: string, contents: string): Runbook {
   return {
     id,
@@ -230,6 +282,7 @@ function parseRunbook(id: string, filename: string, contents: string): Runbook {
     description: extractDescription(id, contents),
     params: parseParams(id, contents),
     confirm: parseConfirm(contents),
+    nodes: parseNodes(contents),
     filename,
     contents,
   };

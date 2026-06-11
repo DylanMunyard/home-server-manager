@@ -122,7 +122,7 @@ schedule: "*/5 * * * *"      # 5-field cron, evaluated in the API process TZ
 target: bethany/proxmox      # global server id, OR a list (parallel fan-out)
 run: vpn-check               # runbook executed each tick — the "check"
 when: { exit: nonzero }      # OPTIONAL: when does the check mean "remediate"?
-then: pia-vpn-reset          # OPTIONAL: runbook run when `when` matches
+then: pia-vpn-reset          # OPTIONAL: runbook OR list run in order on match
 params: { PKG: htop }        # OPTIONAL: values for the runbook's `# params:`
 notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 ```
@@ -130,7 +130,11 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 - **In-memory scheduler (croner), no persistence by design** — last-run state
   in a `Map` only, surfaced read-only at `GET /api/jobs`.
 - **Runbooks signal via exit code** — a check exits nonzero to mean "act"; the
-  engine stays dumb, the logic lives in bash.
+  engine stays dumb, the logic lives in bash (incl. sustained/consecutive
+  debounce — see `temp-check` / `node-health`).
+- **`then` is a chain** — a list runs sequentially on trigger; the `action`
+  alert is one combined push (check reason + a section per runbook), so a list
+  of diagnostics (e.g. the dotnet scripts) turns an alert into an answer.
 - **`env:` vs `params:`** — `env: { NAME: ${VAR} }` injects *secrets* resolved
   from process env (stored raw in `JobConfig` so the API never leaks them);
   `params:` are *literal* non-secret values for a runbook's declared

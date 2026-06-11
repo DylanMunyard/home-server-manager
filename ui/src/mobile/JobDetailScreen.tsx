@@ -8,9 +8,10 @@ import { useAiStatus } from '../jobs/useAiStatus.ts';
 type Props = {
   job: Job;
   checkRunbook: Runbook | null;
-  remediateRunbook: Runbook | null;
+  thenRunbooks: Record<string, Runbook | null>;
   running: boolean;
   onRun: () => void;
+  onFire: () => void;   // forced run: gate tripped, `then` chain + real alerts
 };
 
 function Peek({ runbook }: { runbook: Runbook | null }) {
@@ -25,7 +26,8 @@ function Peek({ runbook }: { runbook: Runbook | null }) {
   );
 }
 
-export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, onRun }: Props) {
+export function JobDetailScreen({ job, checkRunbook, thenRunbooks, running, onRun, onFire }: Props) {
+  const thens = job.then ?? [];
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<'output' | 'flow' | 'investigation'>('output');
@@ -60,7 +62,7 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
       <div className="m-dhead">
         <div className="m-dhead-row">
           <div className="m-dhead-ttl">{job.name}</div>
-          {!job.then && <span className="m-chip key" style={{ background: 'var(--m-ink-2)' }}>monitor</span>}
+          {!thens.length && <span className="m-chip key" style={{ background: 'var(--m-ink-2)' }}>monitor</span>}
         </div>
         {job.description && <div className="m-dhead-desc">{job.description}</div>}
         <div className="m-dhead-target">
@@ -132,23 +134,23 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
               <div className="m-jcond">{condText(job.when)}</div>
               <div className="m-jbranch"><span className="y">✓ false</span> → healthy · sleep until next tick</div>
               <div className="m-jbranch t">
-                <span className="n">✗ true</span> → {job.then ? 'run remediation ↓' : 'alert only · no remediation ↓'}
+                <span className="n">✗ true</span> → {thens.length ? `run ${thens.length === 1 ? 'response' : `${thens.length} responses in order`} ↓` : 'alert only · no remediation ↓'}
               </div>
             </div>
           </div>
 
-          {/* REMEDIATE */}
-          {job.then && (
-            <div className="m-jstep">
-              <div className="m-jrail"><div className="m-jnode warn">2</div><div className="m-jline" /></div>
+          {/* THEN chain */}
+          {thens.map((id, i) => (
+            <div className="m-jstep" key={id}>
+              <div className="m-jrail"><div className="m-jnode warn">{i + 2}</div><div className="m-jline" /></div>
               <div className="m-jbody">
-                <div className="m-jkind err">then · remediate</div>
-                <div className="m-jbk">{job.then}</div>
-                {remediateRunbook?.description && <div className="m-jbd">{remediateRunbook.description}</div>}
-                <Peek runbook={remediateRunbook} />
+                <div className="m-jkind err">then · respond{thens.length > 1 ? ` · ${i + 1}/${thens.length}` : ''}</div>
+                <div className="m-jbk">{id}</div>
+                {thenRunbooks[id]?.description && <div className="m-jbd">{thenRunbooks[id]?.description}</div>}
+                <Peek runbook={thenRunbooks[id] ?? null} />
               </div>
             </div>
-          )}
+          ))}
 
           {/* NOTIFY */}
           {job.notify && (
@@ -168,6 +170,16 @@ export function JobDetailScreen({ job, checkRunbook, remediateRunbook, running, 
         )}
       </div>
 
+      {/* Forced run — the real `then` chain + real alerts, unlike TEST ALERT
+          (synthetic push, nothing runs). Own row: it's a heavier action. */}
+      {thens.length > 0 && (
+        <div className="m-actionbar">
+          <button className="m-run-btn outline small" disabled={running} onClick={onFire}
+            title={`Run ${job.run}, force the gate, and run ${thens.join(' + ')} for real — actual alerts fire`}>
+            {running ? 'RUNNING…' : 'TEST FIRE · RUNS FOR REAL ▸'}
+          </button>
+        </div>
+      )}
       <div className="m-actionbar two">
         <button className="m-run-btn outline small" disabled={alertBusy} onClick={sendTestAlert}
           title="Send a test ntfy alert simulating a failure — nothing runs">

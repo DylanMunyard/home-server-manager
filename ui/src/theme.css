@@ -76,6 +76,25 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
   text-transform: uppercase; letter-spacing: 0.16em; font-size: 11px; color: var(--ink-2);
 }
 .panel-h .count { color: var(--ink-3); }
+.panel-search {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.panel-search input {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  padding: 6px 10px;
+  border-radius: 0;
+  color: var(--ink);
+}
+.panel-search input:focus {
+  outline: none;
+  border-color: var(--line);
+  background: var(--bg);
+}
 .panel-body { flex: 1 1 auto; overflow: auto; }
 
 .group + .group { border-top: 1px solid var(--line); }

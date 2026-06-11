@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useJobs } from './useJobs.ts';
-import { useRunbook } from '../runbooks/useRunbooks.ts';
+import { useRunbook, useRunbookMap } from '../runbooks/useRunbooks.ts';
 import { JobFlow } from './JobFlow.tsx';
 import { JobOutput } from './JobOutput.tsx';
 import { JobInvestigations } from './Investigation.tsx';
@@ -17,7 +17,7 @@ function targetsLabel(job: Job): string {
 function JobRow({ job, active, onPick }: { job: Job; active: boolean; onPick: () => void }) {
   const state = uiState(job.state.running);
   const { human, cadence } = humanizeCron(job.schedule);
-  const chain = job.then ? `${job.run} → ${job.then}` : `${job.run} → notify only`;
+  const chain = job.then?.length ? `${job.run} → ${job.then.join(' → ')}` : `${job.run} → notify only`;
   return (
     <li className={`list-row job-row ${active ? 'active' : ''}`} onClick={onPick}>
       <span className={`dot ${state}`} />
@@ -57,7 +57,7 @@ export function JobsView() {
   };
 
   const checkRunbook = useRunbook(job?.run ?? null);
-  const remediateRunbook = useRunbook(job?.then ?? null);
+  const thenRunbooks = useRunbookMap(job?.then ?? []);
 
   const state = job ? uiState(job.state.running) : 'armed';
   const isRunning = !!job && (job.state.running || runningId === job.id);
@@ -108,6 +108,15 @@ export function JobsView() {
                   >
                     {isRunning ? 'Running…' : 'Run now'}
                   </button>
+                  {!!job.then?.length && (
+                    <button
+                      disabled={isRunning}
+                      onClick={() => run(job.id, true)}
+                      title={`Run ${job.run}, force the gate, and run ${job.then.join(' + ')} FOR REAL — the actual ntfy alerts fire (titled "test fire")`}
+                    >
+                      {isRunning ? 'Running…' : 'Test fire'}
+                    </button>
+                  )}
                   <button
                     disabled={alertBusy}
                     onClick={sendTestAlert}
@@ -120,7 +129,7 @@ export function JobsView() {
                     const o = !isRunning ? summarizeJobRun(job) : null;
                     return o && <span className={`job-run-outcome ${o.tone}`}>{o.text}</span>;
                   })()}
-                  {!job.then && <span className="monitor-tag">monitor only</span>}
+                  {!job.then?.length && <span className="monitor-tag">monitor only</span>}
                 </div>
               </div>
 
@@ -173,7 +182,7 @@ export function JobsView() {
                 </div>
               </div>
               {activeTab === 'output' && <JobOutput job={job} />}
-              {activeTab === 'flow' && <JobFlow job={job} checkRunbook={checkRunbook} remediateRunbook={remediateRunbook} />}
+              {activeTab === 'flow' && <JobFlow job={job} checkRunbook={checkRunbook} thenRunbooks={thenRunbooks} />}
               {activeTab === 'investigation' && <JobInvestigations job={job} aiEnabled={aiEnabled} />}
             </div>
           </>

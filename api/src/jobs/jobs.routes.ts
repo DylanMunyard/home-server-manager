@@ -42,12 +42,13 @@ export async function jobsRoutes(app: FastifyInstance) {
   });
 
   // Manual trigger — runs the job now, off-schedule. Awaits completion so the
-  // caller gets the resulting state back (handy for testing + a future "run
-  // now" button).
-  app.post<{ Params: { id: string } }>('/api/jobs/:id/run', async (req, reply) => {
+  // caller gets the resulting state back. `force: true` ("Test fire") treats
+  // the `when` gate as tripped regardless of the check's result: the real
+  // `then` chain runs and the real alerts fire (titles marked "test fire").
+  app.post<{ Params: { id: string }; Body: { force?: boolean } }>('/api/jobs/:id/run', async (req, reply) => {
     const job = await loadJob(req.params.id);
     if (!job) return reply.code(404).send({ error: 'not found' });
-    await executeJob(job);
+    await executeJob(job, { forceTrigger: req.body?.force === true });
     return { ...job, nextRunAt: nextRuns()[job.id] ?? null, state: stateWithInvestigations(job.id) };
   });
 

@@ -14,11 +14,12 @@ export function useJobs() {
 
   // Trigger a job off-schedule. Returns the updated job so callers can show
   // the immediate outcome (pass / failed / remediation ran) without waiting
-  // for the reload's render cycle.
-  const run = useCallback(async (id: string): Promise<Job | null> => {
+  // for the reload's render cycle. `force` = "Test fire": the gate is treated
+  // as tripped, so the `then` chain + real alerts fire.
+  const run = useCallback(async (id: string, force = false): Promise<Job | null> => {
     setRunning(id);
     try {
-      const updated = await runJob(id);
+      const updated = await runJob(id, force);
       setJobs((prev) => prev.map((j) => (j.id === id ? updated : j)));
       return updated;
     } catch (e) {

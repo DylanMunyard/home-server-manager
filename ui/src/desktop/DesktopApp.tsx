@@ -111,6 +111,25 @@ export function DesktopApp() {
     [allServers, serverId],
   );
 
+  const filteredRunbooks = useMemo(() => {
+    return runbooks.filter((rb) => {
+      // Global runbooks (no nodes specified) are always shown.
+      if (!rb.nodes || rb.nodes.length === 0) return true;
+      
+      // Node-specific runbooks are hidden unless a server is selected.
+      if (!serverId) return false;
+
+      return rb.nodes.some((pattern) => {
+        if (pattern === serverId) return true;
+        if (pattern.includes('*')) {
+          const re = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+          return re.test(serverId);
+        }
+        return false;
+      });
+    });
+  }, [runbooks, serverId]);
+
   const switchMode = useCallback((next: Mode) => {
     if (next === mode) return;
     cancelRun();
@@ -271,7 +290,7 @@ export function DesktopApp() {
         </main>
 
         {mode !== 'chat' && (
-          <RunbookList runbooks={runbooks} selectedId={runbookId} onSelect={(id) => updateParams({ runbook: id })} />
+          <RunbookList runbooks={filteredRunbooks} selectedId={runbookId} onSelect={(id) => updateParams({ runbook: id })} />
         )}
       </div>
       )}

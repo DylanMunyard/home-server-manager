@@ -1,5 +1,11 @@
-import type { Job, TargetRunState } from '../shared/api.ts';
+import type { Job, RunResult, TargetRunState } from '../shared/api.ts';
 import { summarizeTarget } from './cron.ts';
+
+function resultText(r: RunResult): string {
+  let text = [r.stdout, r.stderr].map((s) => s?.trim()).filter(Boolean).join('\n');
+  if (r.error) text = text ? `${text}\n${r.error}` : r.error;
+  return text || '(no output)';
+}
 
 // The captured output for one target's last run: the check's stdout/stderr
 // (and any SSH-level error), or the recorded lastError if it never produced a
@@ -8,9 +14,7 @@ import { summarizeTarget } from './cron.ts';
 function outputText(ts: TargetRunState): string {
   const r = ts.lastCheck;
   if (!r) return ts.lastError ?? '(no output)';
-  let text = [r.stdout, r.stderr].map((s) => s?.trim()).filter(Boolean).join('\n');
-  if (r.error) text = text ? `${text}\n${r.error}` : r.error;
-  return text || '(no output)';
+  return resultText(r);
 }
 
 function TargetBlock({ job, target, ts }: { job: Job; target: string; ts: TargetRunState | undefined }) {
@@ -28,6 +32,19 @@ function TargetBlock({ job, target, ts }: { job: Job; target: string; ts: Target
         </div>
       )}
       <pre className="job-output-pre">{ts ? outputText(ts) : '(no result)'}</pre>
+      {/* Full output of each `then` runbook from the last triggered run — the
+          ntfy alert clips long sections and points the user here. */}
+      {ts?.lastActions?.map((a) => (
+        <div key={a.runbook}>
+          <div className="job-output-th">
+            <span className="mono">then · {a.runbook}</span>
+            <span className={`job-output-tag ${a.result.error || a.result.exitCode !== 0 ? 'err' : 'warn'}`}>
+              {a.result.error ?? `exit ${a.result.exitCode ?? '?'}`}
+            </span>
+          </div>
+          <pre className="job-output-pre">{resultText(a.result)}</pre>
+        </div>
+      ))}
     </div>
   );
 }

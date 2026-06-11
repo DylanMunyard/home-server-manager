@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useGroups } from '../servers/useServers.ts';
-import { useRunbook, useRunbooks } from '../runbooks/useRunbooks.ts';
+import { useRunbook, useRunbookMap, useRunbooks } from '../runbooks/useRunbooks.ts';
 import { useRunbookParams } from '../runbooks/useRunbookParams.ts';
 import { TopBar } from './TopBar.tsx';
 import { TabBar, type MobileTab } from './TabBar.tsx';
@@ -247,13 +247,13 @@ function ShellRoute({ allServers }: { allServers: ReturnType<typeof useGroups>['
 function JobDetailRoute({ jobs, runningId, runJob }: {
   jobs: ReturnType<typeof useJobs>['jobs'];
   runningId: string | null;
-  runJob: (id: string) => Promise<unknown>;
+  runJob: (id: string, force?: boolean) => Promise<unknown>;
 }) {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const job = jobs.find((j) => j.id === jobId) ?? null;
   const jobCheck = useRunbook(job?.run ?? null);
-  const jobRemediate = useRunbook(job?.then ?? null);
+  const jobThens = useRunbookMap(job?.then ?? []);
   if (!job) return <Navigate to="/m/jobs" replace />;
   return (
     <>
@@ -262,9 +262,10 @@ function JobDetailRoute({ jobs, runningId, runJob }: {
         <JobDetailScreen
           job={job}
           checkRunbook={jobCheck}
-          remediateRunbook={jobRemediate}
+          thenRunbooks={jobThens}
           running={job.state.running || runningId === job.id}
           onRun={() => runJob(job.id)}
+          onFire={() => runJob(job.id, true)}
         />
       </div>
     </>

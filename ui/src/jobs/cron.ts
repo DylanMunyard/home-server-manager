@@ -75,12 +75,12 @@ export type JobRunOutcome = { tone: 'ok' | 'warn' | 'err'; text: string };
 export function summarizeTarget(job: Job, ts: TargetRunState | undefined): JobRunOutcome | null {
   if (!ts) return null;
   if (ts.lastError) return { tone: 'err', text: `failed · ${ts.lastError}` };
-  // Job with remediation: triggered=true means the check fired and `then` ran.
-  if (ts.lastTriggered && ts.lastAction) {
-    const code = ts.lastAction.exitCode;
-    return code === 0
-      ? { tone: 'warn', text: `remediation '${job.then}' ran · exit 0` }
-      : { tone: 'err', text: `remediation '${job.then}' exit ${code ?? '?'}` };
+  // Job with a `then` chain: triggered=true means the check fired and it ran.
+  if (ts.lastTriggered && ts.lastActions?.length) {
+    const bad = ts.lastActions.find((a) => a.result.error || a.result.exitCode !== 0);
+    return !bad
+      ? { tone: 'warn', text: `ran ${(job.then ?? []).join(' + ')} · exit 0` }
+      : { tone: 'err', text: `'${bad.runbook}' ${bad.result.error ?? `exit ${bad.result.exitCode ?? '?'}`}` };
   }
   // Pure monitor (no `when`): the check IS the work.
   if (!job.when && ts.lastCheck) {

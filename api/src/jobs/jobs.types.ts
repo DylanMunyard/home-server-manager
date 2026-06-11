@@ -24,7 +24,11 @@ export type JobConfig = {
   targets: string[];     // one or more global server ids "<group>/<server>"
   run: string;           // runbook id executed each tick (the "check")
   when?: Trigger;        // when run's result means "remediate"
-  then?: string;         // runbook id run when `when` matches
+  // Runbook ids run IN ORDER when `when` matches. YAML accepts a single id or a
+  // list (normalised here, same as target → targets). One entry = classic
+  // remediation; several = a response chain, e.g. diagnostics whose combined
+  // output lands in the `action` alert.
+  then?: string[];
   notify?: NotifyRule;
   // Vars injected (as `export NAME=value`) into the job's runbooks before they
   // run over SSH. Values support ${VAR} from the API process env (.env / k8s
@@ -57,7 +61,8 @@ export type RunResult = CollectResult;
 export type TargetRunState = {
   lastCheck?: RunResult;     // result of `run`
   lastTriggered?: boolean;   // did `when` match?
-  lastAction?: RunResult;    // result of `then`, if it ran
+  // Per-runbook results of the `then` chain, in run order, when it ran.
+  lastActions?: { runbook: string; result: RunResult }[];
   lastError?: string;        // human summary of this target's last failure
   // Latest AI investigation for this target, if `investigate` is on and one has
   // run. Live status + summary are overlaid by GET /api/jobs from the ai

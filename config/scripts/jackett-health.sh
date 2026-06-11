@@ -24,6 +24,7 @@
 #   JACKETT_URL:           { label: "Jackett base URL", default: "http://127.0.0.1:9117" }
 #   JACKETT_QUERY:         { label: "Probe search term", default: "ubuntu" }
 #   JACKETT_APIKEY_MANUAL: { label: "API key (manual runs only — jobs read .env)" }
+# nodes: [ bethany/linux-isos ]
 
 set -euo pipefail
 

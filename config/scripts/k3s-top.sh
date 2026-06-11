@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # k3s-top — k3s node + pod resource usage, busiest pods by CPU first
 # (kubectl top; degrades to a plain pod list when metrics-server is missing)
+# nodes: [ pi-town/*, hetzner/bfstats ]
 set -euo pipefail
 
 # if-condition position keeps `set -e` from killing the script on failure.

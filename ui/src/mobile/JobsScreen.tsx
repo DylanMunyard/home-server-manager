@@ -42,7 +42,7 @@ export function JobsScreen({ jobs, selectedId, onPick }: Props) {
         ) : filtered.map((j) => {
           const state = uiState(j.state.running);
           const { human, cadence } = humanizeCron(j.schedule);
-          const chain = j.then ? `${j.run} → ${j.then}` : `${j.run} → notify only`;
+          const chain = j.then?.length ? `${j.run} → ${j.then.join(' → ')}` : `${j.run} → notify only`;
           return (
             <button
               key={j.id}

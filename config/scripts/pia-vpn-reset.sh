@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # pia-vpn-reset — regen wireguard + restart tunnel
+# nodes: [ bethany/linux-isos ]
 set -euo pipefail
 
 systemctl stop wg-quick@wg0.service

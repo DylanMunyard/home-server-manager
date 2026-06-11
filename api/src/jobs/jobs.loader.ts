@@ -14,7 +14,7 @@ type RawJob = {
   target?: unknown;       // string OR list of strings (normalised to targets[])
   run?: string;
   when?: { exit?: unknown; stdout_contains?: unknown };
-  then?: string;
+  then?: unknown;         // string OR list of strings (normalised to a list)
   notify?: { on?: unknown; priority?: unknown };
   env?: unknown;
   params?: unknown;
@@ -32,6 +32,19 @@ function parseTargets(raw: unknown, ctx: string): string[] {
   return list.map((t) => {
     if (typeof t !== 'string' || t.trim() === '') {
       throw new Error(`${ctx}: each target must be a non-empty '<group>/<server>' string`);
+    }
+    return t;
+  });
+}
+
+/** `then` accepts a single runbook id or a list; normalised to a non-empty list. */
+function parseThen(raw: unknown, ctx: string): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const list = Array.isArray(raw) ? raw : [raw];
+  if (list.length === 0) throw new Error(`${ctx}: 'then' list is empty`);
+  return list.map((t) => {
+    if (typeof t !== 'string' || t.trim() === '') {
+      throw new Error(`${ctx}: each 'then' entry must be a non-empty runbook id`);
     }
     return t;
   });
@@ -124,12 +137,13 @@ function buildJob(
     if (!serverIds.has(t)) throw new Error(`${ctx}: unknown target '${t}'`);
   }
   if (!runbookIds.has(raw.run)) throw new Error(`${ctx}: unknown run runbook '${raw.run}'`);
-  if (raw.then !== undefined && !runbookIds.has(raw.then)) {
-    throw new Error(`${ctx}: unknown then runbook '${raw.then}'`);
+  const then = parseThen(raw.then, ctx);
+  for (const t of then ?? []) {
+    if (!runbookIds.has(t)) throw new Error(`${ctx}: unknown then runbook '${t}'`);
   }
 
   const when = parseTrigger(raw.when, ctx);
-  if (raw.then !== undefined && when === undefined) {
+  if (then !== undefined && when === undefined) {
     throw new Error(`${ctx}: 'then' requires a 'when' condition`);
   }
 
@@ -152,7 +166,7 @@ function buildJob(
     targets,
     run: raw.run,
     when,
-    then: raw.then,
+    then,
     notify: parseNotify(raw.notify, ctx),
     env: parseEnv(raw.env, ctx),
     params: parseJobParams(raw.params, ctx),

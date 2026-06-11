@@ -12,7 +12,7 @@ schedule: "*/5 * * * *"      # 5-field cron, evaluated in the API process TZ
 target: bethany/proxmox      # global server id, OR a list (see multi-target below)
 run: vpn-check               # runbook executed each tick — the "check"
 when: { exit: nonzero }      # OPTIONAL: when does the check mean "remediate"?
-then: pia-vpn-reset          # OPTIONAL: runbook run when `when` matches
+then: pia-vpn-reset          # OPTIONAL: runbook (or list) run when `when` matches
 params: { PKG: htop }        # OPTIONAL: values for the runbook's `# params:`
 notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 ```
@@ -31,12 +31,35 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   engine stays dumb; put the logic in bash (curl + `jq` + compare → exit 0/1).
 - **`when.exit`** ∈ `nonzero` (default) | `zero` | `<int>`; optional
   `stdout_contains` is ANDed. `then` requires a `when`.
-- **Notify semantics:** `action` fires whenever `then` runs (informational);
-  `error` fires when the *effective work runbook* fails — `then` if it ran, else
-  `run` when the job has no `when` (a check's nonzero exit is a signal, not a
-  failure), or any SSH-level error. ntfy payload carries job/target/runbook +
-  raw output. ntfy is env-driven (`NTFY_URL`/`NTFY_TOPIC`/`NTFY_TOKEN`); unset
-  topic ⇒ alerting disabled (no-op, not a startup failure).
+- **`then` is a chain.** A single runbook id or a YAML list (normalised to
+  `then: string[]`, same pattern as `target` → `targets`). On trigger the chain
+  runs **sequentially in declared order** — entries often sample the same
+  resources (perf, nsenter) and their alert sections should read in order — and
+  one entry failing does NOT stop the rest (a later diagnostic may still carry
+  the signal). Per-runbook results land in `state.targets[t].lastActions[]`
+  (run order, surfaced by `GET /api/jobs` and the Last-run tab). Use a single
+  entry for classic remediation; a list for diagnostics whose combined output
+  IS the alert (e.g. dotnet-hot-threads + dotnet-cpu-profile).
+- **"Test fire" = forced manual run.** `POST /api/jobs/:id/run` with
+  `{ force: true }` (the Test fire button) treats the `when` gate as tripped:
+  the check still runs (its output is the alert's "reason" section), the `then`
+  chain executes FOR REAL, and the real `action`/`error` alerts fire with
+  titles marked "(test fire)". This is the way to test the alert pipeline —
+  `/api/alerts/test` ("Test alert") is a synthetic push, nothing runs. Mind
+  jobs whose `then` has side effects (vpn-watchdog resets the tunnel).
+- **Sustained/consecutive thresholds live in the check script, not here.** The
+  engine has no debounce concept on purpose — `temp-check` (time-based) and
+  `node-health` (count-based, per-signal) keep a tiny state file on the target
+  and exit nonzero exactly once per incident, re-arming on recovery.
+- **Notify semantics:** `action` fires whenever the `then` chain runs
+  (informational) — ONE combined push per target: the check's output (the
+  trigger reason) plus a section per `then` runbook, each clipped so the body
+  stays under ntfy's ~4 KB inline limit (full output in the jobs UI). `error`
+  fires when the *effective work runbook* fails — any `then` entry if the chain
+  ran (the push carries the first failure's output), else `run` when the job
+  has no `when` (a check's nonzero exit is a signal, not a failure), or any
+  SSH-level error. ntfy is env-driven (`NTFY_URL`/`NTFY_TOPIC`/`NTFY_TOKEN`);
+  unset topic ⇒ alerting disabled (no-op, not a startup failure).
 - **Jobs are auxiliary — they must never take down the API.** `loadJobs`
   (`jobs.loader.ts`) validates each file independently (cron parses;
   `target`/`run`/`then` resolve to real servers/runbooks) and *skips + logs* a

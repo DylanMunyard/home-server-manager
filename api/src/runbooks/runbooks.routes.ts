@@ -4,7 +4,7 @@ import { loadRunbooks, loadRunbook } from './runbooks.loader.js';
 export async function runbooksRoutes(app: FastifyInstance) {
   app.get('/api/runbooks', async () => {
     const books = await loadRunbooks();
-    return books.map(({ id, name, description, params, confirm, filename }) => ({ id, name, description, params, confirm, filename }));
+    return books.map(({ id, name, description, params, confirm, nodes, filename }) => ({ id, name, description, params, confirm, nodes, filename }));
   });
 
   app.get<{ Params: { id: string } }>('/api/runbooks/:id', async (req, reply) => {

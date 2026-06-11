@@ -44,6 +44,9 @@ export type RunbookSummary = {
   // Marks a destructive/irreversible runbook. Jobs and feature integrations run
   // the script directly and ignore this.
   confirm?: string;
+  // If set, this runbook is hidden by default unless one of these node ids is selected.
+  // Supports glob-style matching (e.g. "bfstats-*").
+  nodes?: string[];
   filename: string;
 };
 
@@ -92,7 +95,8 @@ export type Investigation = {
 export type TargetRunState = {
   lastCheck?: RunResult;
   lastTriggered?: boolean;
-  lastAction?: RunResult;
+  // Per-runbook results of the `then` chain, in run order, when it ran.
+  lastActions?: { runbook: string; result: RunResult }[];
   lastError?: string;
   // Latest AI investigation for this target (overlaid live by GET /api/jobs);
   // the full transcript streams over /ws/ai/investigate?id=…
@@ -116,7 +120,7 @@ export type Job = {
   targets: string[];       // one or more "<group>/<server>"
   run: string;             // check runbook id
   when?: JobTrigger;
-  then?: string;           // remediation runbook id
+  then?: string[];         // runbook ids run in order when `when` matches
   notify?: JobNotify;
   env?: Record<string, string>;
   params?: Record<string, string>;   // literal values for the runbook's declared params
@@ -206,8 +210,13 @@ export async function fetchRunbook(id: string): Promise<Runbook> {
 }
 
 // Same 401 bounce as apiGet, for the run-now action.
-async function apiPost(path: string, errorMsg: string): Promise<Response> {
-  const r = await fetch(path, { method: 'POST' });
+async function apiPost(path: string, errorMsg: string, body?: unknown): Promise<Response> {
+  const r = await fetch(path, {
+    method: 'POST',
+    ...(body !== undefined
+      ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+      : {}),
+  });
   if (r.status === 401) {
     window.location.href = '/api/auth/login';
     return new Promise<Response>(() => {});
@@ -352,8 +361,11 @@ export async function deleteFile(server: string, path: string): Promise<{ ok: bo
 }
 
 // Triggers a job off-schedule; resolves with the updated job (incl. fresh state).
-export async function runJob(id: string): Promise<Job> {
-  const r = await apiPost(`/api/jobs/${encodeURIComponent(id)}/run`, 'failed to run job');
+// `force` ("Test fire") makes the engine treat the `when` gate as tripped, so
+// the `then` chain runs for real and the real alerts fire — the honest way to
+// test the alert pipeline on a healthy box.
+export async function runJob(id: string, force = false): Promise<Job> {
+  const r = await apiPost(`/api/jobs/${encodeURIComponent(id)}/run`, 'failed to run job', force ? { force: true } : undefined);
   return r.json();
 }
 

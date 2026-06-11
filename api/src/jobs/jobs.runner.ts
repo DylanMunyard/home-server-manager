@@ -81,13 +81,43 @@ function alertBody(target: string, runbook: string, r: RunResult): string {
   ].join('\n');
 }
 
+type ActionRun = { runbook: string; result: RunResult };
+
+function output(r: RunResult): string {
+  return [r.stdout, r.stderr].filter(Boolean).join('\n').trim() || '(no output)';
+}
+
+// ntfy turns a body over ~4 KB into a .txt attachment, unreadable on a phone —
+// keep each section short enough that a check + a couple of diagnostics stay
+// inline. The full output is always in the jobs UI (lastCheck/lastActions).
+function clip(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max)}\n… (+${s.length - max} chars — full output in the jobs UI)`;
+}
+
+/**
+ * Body for the `action` alert: WHY the gate tripped (the check's output), then
+ * one section per `then` runbook. One push per target, however long the chain.
+ */
+function actionAlertBody(target: string, job: JobConfig, check: RunResult, actions: ActionRun[]): string {
+  const parts = [
+    `target: ${target}`,
+    `check:  ${job.run} → ${failureSummary(check)}`,
+    '',
+    clip(output(check), 800),
+  ];
+  for (const a of actions) {
+    parts.push('', `== ${a.runbook} (${failureSummary(a.result)}) ==`, clip(output(a.result), 1200));
+  }
+  return parts.join('\n');
+}
+
 /**
  * Run the job's check (+ optional `then` + alerts) against ONE target, returning
  * that target's outcome. Never throws — a bad target must not abort its siblings
  * or crash the scheduler tick. The notify semantics are unchanged from the
  * single-target days; they just key on this target.
  */
-async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunState> {
+async function runOnTarget(job: JobConfig, target: string, forceTrigger: boolean): Promise<TargetRunState> {
   const ts: TargetRunState = {};
   try {
     const server = await loadServer(target);
@@ -101,30 +131,42 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
     const check = await collectScript(server, runbookPrelude(checkRunbook, job) + checkRunbook.contents);
     ts.lastCheck = check;
 
-    const triggered = job.when ? triggerMatches(job.when, check) : false;
+    // A forced run ("Test fire") treats the gate as tripped no matter what the
+    // check said — the real `then` chain runs and the real alerts fire, which
+    // is the only honest way to test the whole pipeline on a healthy box.
+    const triggered = forceTrigger || (job.when ? triggerMatches(job.when, check) : false);
     ts.lastTriggered = triggered;
 
-    // The "work runbook" whose failure counts as an `error` for alerting:
-    // `then` if it ran, else the check when the job has no `when` (i.e. the
-    // check IS the work). A check with a `when` is a signal — its nonzero exit
-    // is the trigger, not a failure.
-    let action: RunResult | undefined;
+    // The "work runbooks" whose failure counts as an `error` for alerting:
+    // the `then` chain if it ran, else the check when the job has no `when`
+    // (i.e. the check IS the work). A check with a `when` is a signal — its
+    // nonzero exit is the trigger, not a failure.
+    //
+    // The chain runs SEQUENTIALLY in declared order — responses often sample
+    // the same resources (perf, nsenter) and their sections should read in
+    // order in the alert. One failing doesn't stop the rest: a later runbook
+    // may still carry the useful signal.
+    const actions: ActionRun[] = [];
     if (triggered && job.then) {
-      const actionRunbook = await loadRunbook(job.then);
-      if (!actionRunbook) throw new Error(`unknown then runbook '${job.then}'`);
-      action = await collectScript(server, runbookPrelude(actionRunbook, job) + actionRunbook.contents);
-      ts.lastAction = action;
+      for (const id of job.then) {
+        const actionRunbook = await loadRunbook(id);
+        if (!actionRunbook) throw new Error(`unknown then runbook '${id}'`);
+        actions.push({ runbook: id, result: await collectScript(server, runbookPrelude(actionRunbook, job) + actionRunbook.contents) });
+      }
+      ts.lastActions = actions;
     }
 
     const events = new Set(job.notify?.on ?? []);
     const priority = job.notify?.priority;
 
-    // `action` event — remediation ran (informational), regardless of outcome.
-    if (action && events.has('action')) {
-      const ok = !failed(action);
+    // `action` event — the chain ran (informational), regardless of outcome.
+    // One combined push per target: trigger reason + a section per runbook.
+    if (actions.length > 0 && events.has('action')) {
+      const ok = actions.every((a) => !failed(a.result));
       await sendAlert({
-        title: `${job.name}: ran ${job.then} on ${target}`,
-        body: alertBody(target, job.then!, action),
+        // Mark forced runs so a test push is never mistaken for a real incident.
+        title: `${job.name}: ran ${job.then!.join(' + ')} on ${target}${forceTrigger ? ' (test fire)' : ''}`,
+        body: actionAlertBody(target, job, check, actions),
         priority,
         tags: [ok ? 'wrench' : 'rotating_light'],
       });
@@ -136,12 +178,16 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
     // (the check IS the work); else an SSH-level error on the check (a check
     // WITH a `when` exiting nonzero is a trigger signal, not a failure).
     let workFailure: { runbookId: string; result: RunResult; reason: string; title: string } | undefined;
-    if (action && failed(action)) {
+    const failedActions = actions.filter((a) => failed(a.result));
+    if (failedActions.length > 0) {
+      // The error alert carries the FIRST failure's output; the `action` alert
+      // (and the jobs UI) has every section.
+      const ids = failedActions.map((a) => a.runbook).join(', ');
       workFailure = {
-        runbookId: job.then!,
-        result: action,
-        reason: `then '${job.then}' failed: ${failureSummary(action)}`,
-        title: `${job.name}: ${job.then} FAILED on ${target}`,
+        runbookId: failedActions[0].runbook,
+        result: failedActions[0].result,
+        reason: `then '${ids}' failed: ${failureSummary(failedActions[0].result)}`,
+        title: `${job.name}: ${ids} FAILED on ${target}`,
       };
     } else if (!job.when && failed(check)) {
       workFailure = {
@@ -182,8 +228,8 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
 
     console.log(
       `[jobs] ${job.id}@${target}: check exit=${check.exitCode}${check.error ? ` error=${check.error}` : ''}` +
-      ` triggered=${triggered}` +
-      (action ? ` action(${job.then}) exit=${action.exitCode}${action.error ? ` error=${action.error}` : ''}` : ''),
+      ` triggered=${triggered}${forceTrigger ? ' (forced)' : ''}` +
+      actions.map((a) => ` action(${a.runbook}) exit=${a.result.exitCode}${a.result.error ? ` error=${a.result.error}` : ''}`).join(''),
     );
   } catch (err) {
     ts.lastError = (err as Error).message;
@@ -197,7 +243,7 @@ async function runOnTarget(job: JobConfig, target: string): Promise<TargetRunSta
  * sessions), recording each target's outcome. Updates in-memory state. Never
  * throws — scheduler ticks must not crash the process.
  */
-export async function executeJob(job: JobConfig): Promise<void> {
+export async function executeJob(job: JobConfig, opts: { forceTrigger?: boolean } = {}): Promise<void> {
   const s = getState(job.id);
   if (s.running) {
     console.warn(`[jobs] ${job.id}: previous run still in flight — skipping tick`);
@@ -209,7 +255,7 @@ export async function executeJob(job: JobConfig): Promise<void> {
   s.targets = {};
 
   try {
-    const results = await Promise.all(job.targets.map((t) => runOnTarget(job, t)));
+    const results = await Promise.all(job.targets.map((t) => runOnTarget(job, t, opts.forceTrigger ?? false)));
     job.targets.forEach((t, i) => { s.targets[t] = results[i]; });
   } finally {
     s.running = false;

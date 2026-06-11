@@ -5,7 +5,7 @@ import { condText, humanizeCron } from './cron.ts';
 type Props = {
   job: Job;
   checkRunbook: Runbook | null;
-  remediateRunbook: Runbook | null;
+  thenRunbooks: Record<string, Runbook | null>;
 };
 
 function BookRef({ id, runbook }: { id: string; runbook: Runbook | null }) {
@@ -23,9 +23,10 @@ function BookRef({ id, runbook }: { id: string; runbook: Runbook | null }) {
   );
 }
 
-export function JobFlow({ job, checkRunbook, remediateRunbook }: Props) {
+export function JobFlow({ job, checkRunbook, thenRunbooks }: Props) {
   const { human } = humanizeCron(job.schedule);
   const notifyOn = job.notify?.on ?? [];
+  const thens = job.then ?? [];
 
   return (
     <div className="flow">
@@ -55,24 +56,24 @@ export function JobFlow({ job, checkRunbook, remediateRunbook }: Props) {
           <div className="flow-cond">{condText(job.when)}</div>
           <div className="flow-branch"><span className="y">✓ false</span> → healthy · sleep until next tick</div>
           <div className="flow-branch t">
-            <span className="n">✗ true</span> → {job.then ? 'run remediation ↓' : 'alert only · no remediation ↓'}
+            <span className="n">✗ true</span> → {thens.length ? `run ${thens.length === 1 ? 'response' : `${thens.length} responses in order`} ↓` : 'alert only · no remediation ↓'}
           </div>
         </div>
       </div>
 
-      {/* 2 — REMEDIATE (hidden when no `then`) */}
-      {job.then && (
-        <div className="flow-step">
+      {/* 2..n — THEN chain (hidden when no `then`) */}
+      {thens.map((id, i) => (
+        <div className="flow-step" key={id}>
           <div className="flow-rail">
-            <span className="flow-node warn">2</span>
+            <span className="flow-node warn">{i + 2}</span>
             <span className="flow-line" />
           </div>
           <div className="flow-body">
-            <div className="flow-kind err">then · remediate</div>
-            <BookRef id={job.then} runbook={remediateRunbook} />
+            <div className="flow-kind err">then · respond{thens.length > 1 ? ` · ${i + 1}/${thens.length}` : ''}</div>
+            <BookRef id={id} runbook={thenRunbooks[id] ?? null} />
           </div>
         </div>
-      )}
+      ))}
 
       {/* NOTIFY (hidden when absent) */}
       {job.notify && (

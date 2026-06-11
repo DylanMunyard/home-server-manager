@@ -1,0 +1,39 @@
+name: bfstats watchdog
+description: Alert when the node runs hot (CPU/memory) or bfstats.io responds slowly, with .NET diagnostics attached
+schedule: "* * * * *"            # 1-minute "pings" — with BREACH_COUNT 5, an
+                                 # alert fires ~5 minutes into a sustained problem
+target: hetzner/bfstats
+
+run: node-health                 # cpu cores + mem% + site latency, each with its
+                                 # own consecutive-breach counter (alerts once
+                                 # per incident, re-arms on recovery)
+
+when:
+  exit: nonzero                  # a signal just crossed its 5th consecutive breach
+
+# Diagnostics, not remediation: run in order, and each one's output lands as a
+# section in the `action` alert — the ntfy push says what's burning, not just
+# that something is. Both no-op gracefully (exit 2, "no process found") if the
+# dotnet process isn't the culprit; the alert still carries the check's reason.
+then:
+  - dotnet-hot-threads           # which threads are ON CPU + their managed stacks
+  - dotnet-cpu-profile           # 15s perf sample → self-time by library/symbol
+
+params:
+  CPU_MAX_CORES: "3"             # busy CPU above 3 cores' worth
+  MEM_MAX_PCT: "85"
+  WEB_URL: "https://bfstats.io"
+  WEB_MAX_SECS: "2"
+  BREACH_COUNT: "5"              # consecutive 1-minute ticks before alerting
+
+notify:
+  on: [action, error]            # action = the alert with diagnostics attached;
+                                 # error = a diagnostic itself failed / SSH broke
+  priority: high
+
+investigate: >
+  A health signal (CPU above 3 cores, memory above 85%, or bfstats.io slower
+  than 2s) breached for 5 consecutive minutes. Correlate it with what the k3s
+  workloads were doing — identify the pod/process responsible (the June 2026
+  round-report zombie loops are the known prior) and whether the site slowness
+  is CPU starvation, memory pressure, or something downstream like SQLite.
