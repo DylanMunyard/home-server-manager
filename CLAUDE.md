@@ -22,6 +22,12 @@ config/
 dev/run.sh          starts both stacks with prefixed output (see "Verify")
 ```
 
+**Feature deep-dives live in nested `CLAUDE.md` files** — `api/src/runbooks/`,
+`api/src/jobs/`, `api/src/metrics/`, `api/src/k8s/`, `api/src/ai/`. Each covers
+its UI counterpart too. This root file keeps only cross-cutting rules + a
+summary per feature; **read the nested file before changing that feature**,
+even when you're only touching its `ui/src/` side.
+
 ## Conventions (non-negotiable)
 
 - **Feature-first folders directly under `src/`** — `src/servers/`, `src/runbooks/`,
@@ -34,6 +40,12 @@ dev/run.sh          starts both stacks with prefixed output (see "Verify")
 - **No backwards-compatibility shims.** This is a personal tool — change the
   shape, update the consumers, move on. Don't introduce feature flags or
   legacy aliases.
+- **Auxiliary subsystems must never take down the API.** Jobs, the metrics
+  collector, the k8s panel, and the AI features are all isolated from the fatal
+  `listen` path — malformed config is skipped + logged, runtime failures are
+  caught and degrade per-feature. Only auth (`auth.config.ts`) and the server
+  YAML loader fail boot, because every route depends on them. Keep new
+  subsystems on the lenient side of this line.
 
 ## Server YAML — one file per group
 
@@ -89,45 +101,14 @@ set -euo pipefail
   shebang is ignored at runtime; it's there for local editor tooling.
 - **No TTY** is allocated. Scripts that prompt (e.g. interactive `sudo`) will
   hang. Configure passwordless sudo on the target for the relevant commands.
-
-### Runbook inputs (`# params:`)
-
-A runbook declares inputs with a YAML block in the header comment — a *config
-convention* (same shape as a job's `env:`), deliberately not a bespoke sigil DSL,
-so a new runbook reads like the rest of the YAML config. The block is parsed by
-stripping the leading `# ` (same as the description), so it stays valid bash.
-
-```bash
-#!/usr/bin/env bash
-# install-pkg — install any package via the detected manager
-#
-# params:
-#   PKG:     { label: Package to install, required: true }
-#   MANAGER: { label: Force a package manager, default: auto, choices: [auto, apt, brew] }
-
-set -euo pipefail
-echo "installing $PKG with $MANAGER"
-```
-
-- **Map keyed by the env-var name.** The key is the shell variable the script
-  reads (`$PKG`); it must be a valid identifier. Per-param fields are all
-  optional: `label` (UI text, defaults to the key), `required` (UI blocks Run
-  until filled), `default` (prefill + fallback), `choices` (list ⇒ a `<select>`,
-  resolves to the first entry when unset). It's real YAML flow syntax, so a value
-  containing `,` `:` `{` `}` must be quoted (`label: "host, port"`).
-- **Values inject exactly like a job's `env:`** — resolved server-side, shell-
-  quoted, and prepended as `export NAME=…` before the script is piped to
-  `bash -s` (shared builder: `api/src/ssh/prelude.ts`). The script just reads
-  `$NAME`. Only *declared* params are ever injected (unknown client keys are
-  dropped — no arbitrary-env injection), and every declared param is always set
-  (empty string at worst), so scripts stay safe under `set -u`.
-- **No prompting.** Inputs come from the UI before the run, not an interactive
-  prompt — there's no TTY (see above). Don't declare a param expecting `read`.
-- **Recurring jobs** supply values for a parameterized runbook via their own
-  `params:` block (see "Recurring jobs"); the param UI is only for manual runs.
-  Declared defaults still apply when a job omits a value. A malformed `# params:`
-  block is non-fatal — it logs a warning and the runbook loads with no params
-  (same "don't take down the API" stance as jobs).
+- **Inputs (`# params:`):** a runbook declares UI inputs as a YAML map in the
+  header comment, keyed by the env var the script reads
+  (`PKG: { label: …, required: true, default: …, choices: […] }`). Values are
+  resolved server-side and injected as `export NAME=…` via the shared prelude
+  builder (`api/src/ssh/prelude.ts`) — same mechanism as a job's `env:`. Only
+  declared params are injected; every declared one is always set (safe under
+  `set -u`). No prompting — there's no TTY. Full field semantics + job
+  interplay: `api/src/runbooks/CLAUDE.md`.
 
 ## Recurring jobs — one file per job
 
@@ -138,7 +119,7 @@ Filename stem = job id. Engine is `api/src/jobs/`; alerts are `api/src/alerts/`.
 # config/jobs/vpn-watchdog.yaml
 name: VPN watchdog
 schedule: "*/5 * * * *"      # 5-field cron, evaluated in the API process TZ
-target: bethany/proxmox      # global server id, OR a list (see multi-target below)
+target: bethany/proxmox      # global server id, OR a list (parallel fan-out)
 run: vpn-check               # runbook executed each tick — the "check"
 when: { exit: nonzero }      # OPTIONAL: when does the check mean "remediate"?
 then: pia-vpn-reset          # OPTIONAL: runbook run when `when` matches
@@ -146,229 +127,56 @@ params: { PKG: htop }        # OPTIONAL: values for the runbook's `# params:`
 notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 ```
 
-- **In-memory scheduler, no persistence by design.** The scheduler lives in the
-  API process (`jobs.scheduler.ts`, croner); on restart, schedules start fresh.
-  No DB, no run history, no state file — same clone-and-go property as the rest.
-  Holds last-run state in a `Map` only (surfaced read-only at `GET /api/jobs`).
-- **Multi-target fan-out.** `target` accepts a single `<group>/<server>` string
-  *or* a YAML list. The engine normalises to `targets[]` and runs the check (+
-  `then` + alerts) against each host **in parallel**, with independent results.
-  Per-target outcomes are surfaced under `state.targets` (keyed by server id) at
-  `GET /api/jobs`. `params`/`env` are job-wide — group hosts that share a
-  threshold/config in one job; split when they differ (e.g. x86 vs Pi temps).
-- **Runbooks signal via exit code.** A check exits nonzero to mean "act". The
-  engine stays dumb; put the logic in bash (curl + `jq` + compare → exit 0/1).
-- **`when.exit`** ∈ `nonzero` (default) | `zero` | `<int>`; optional
-  `stdout_contains` is ANDed. `then` requires a `when`.
-- **Notify semantics:** `action` fires whenever `then` runs (informational);
-  `error` fires when the *effective work runbook* fails — `then` if it ran, else
-  `run` when the job has no `when` (a check's nonzero exit is a signal, not a
-  failure), or any SSH-level error. ntfy payload carries job/target/runbook +
-  raw output. ntfy is env-driven (`NTFY_URL`/`NTFY_TOPIC`/`NTFY_TOKEN`); unset
-  topic ⇒ alerting disabled (no-op, not a startup failure).
-- **Jobs are auxiliary — they must never take down the API.** `loadJobs`
-  (`jobs.loader.ts`) validates each file independently (cron parses;
-  `target`/`run`/`then` resolve to real servers/runbooks) and *skips + logs* a
-  malformed one rather than throwing, so the other jobs (and the API) survive.
-  `startScheduler` is isolated from the fatal `listen` path in `server.ts` and
-  logs on failure instead of `process.exit`. Contrast `auth.config.ts`, which
-  *does* fail boot — but auth gates every route, so it's load-bearing; jobs
-  aren't. (A script failing at run time is likewise caught in the runner.)
-- **`env:` injects secrets into runbooks.** Runbooks execute remotely via
-  `bash -s`, so the API process env does *not* reach them. A job's optional
-  `env: { NAME: ${VAR} }` is resolved from process env (`.env`/k8s secret) and
-  prepended as `export NAME=…` to the job's runbooks before they're sent over
-  SSH — the script reads `$NAME` normally. Do **not** try to `${VAR}`-expand
-  script *text*: bash uses `${...}` itself and it would collide. Values are
-  stored RAW in `JobConfig` (resolved only at run time) so `GET /api/jobs` never
-  leaks the secret; an unset `${VAR}` surfaces as a per-run error (in the job's
-  last-run state + logs), never a failed boot.
-- **`params:` supplies a runbook's declared inputs.** Optional
-  `params: { NAME: value }` — *literal* values for the target runbook's
-  `# params:` (see "Runbook inputs"). Resolved per-runbook at run time via the
-  same path as a manual run: the runbook's declared defaults fill in for anything
-  omitted, undeclared keys are dropped, and `run`/`then` each get only what they
-  declare. Distinct from `env`: params are plain non-secret values (surfaced by
-  `GET /api/jobs`) and map to declared inputs; `env` is for `${VAR}` secrets. On a
-  name collision params win (injected after env).
+- **In-memory scheduler (croner), no persistence by design** — last-run state
+  in a `Map` only, surfaced read-only at `GET /api/jobs`.
+- **Runbooks signal via exit code** — a check exits nonzero to mean "act"; the
+  engine stays dumb, the logic lives in bash.
+- **`env:` vs `params:`** — `env: { NAME: ${VAR} }` injects *secrets* resolved
+  from process env (stored raw in `JobConfig` so the API never leaks them);
+  `params:` are *literal* non-secret values for a runbook's declared
+  `# params:`. Params win on a name collision. Don't `${VAR}`-expand script
+  text — bash owns `${...}`.
+- Malformed job files are **skipped + logged, never thrown** (see Conventions).
+- Full semantics (`when`/`then`, notify rules, multi-target fan-out, env/params
+  resolution): `api/src/jobs/CLAUDE.md`.
 
 ## Live dashboard — `config/dashboard.yaml`
 
 A "how are things right now" overview per node — CPU%, memory%, temp, disk —
-visualised with live sparkline charts (visx), grouped by node. API engine is
-`api/src/metrics/`; UI is `ui/src/metrics/` (the shared `Dashboard` component
-renders in both shells). Single optional config file with clone-and-go defaults.
+with live sparkline charts (visx), grouped by node. Engine `api/src/metrics/`;
+UI `ui/src/metrics/` (shared `Dashboard` renders in both shells; mobile gets a
+4th tab). Single optional config file with clone-and-go defaults.
 
-```yaml
-# config/dashboard.yaml — all fields optional
-interval: 5                 # seconds between samples
-mounts: auto                # 'auto' itemises every real FS; or pin [/, /mnt/data]
-retention: 2h               # ring-buffer window (s/m/h or bare seconds)
-thresholds: { cpu: 90, mem: 90, disk: 85, temp: 80 }  # tile-colour only
-nodes: all                  # or a list of <group>/<server> ids
-paths:                      # du-sampled dirs per node (non-mounts df can't see)
-  hetzner/bfstats: { neo4j: /var/lib/rancher/k3s/storage/pvc-..._neo4j-pvc }
-inspect:                    # drill-down runbooks in the node detail view
-  default: [top-cpu]
-  hetzner/bfstats: [top-cpu, k3s-top]
-panels:                     # rich detail-view panels per node ('k3s' only today)
-  hetzner/bfstats: [k3s]
-```
-
-- **Zero-install probe.** `config/scripts/metrics-stream.sh` is a normal runbook
-  that *loops*, emitting one NDJSON sample per `METRICS_INTERVAL` from `/proc` +
-  `/sys` + `df` — no packages/sudo/TTY, same ethos as `temp-check`. CPU% is the
-  delta of `/proc/stat` over each interval; temp reuses the sysfs sweep (hottest
-  °C, `null` on sensor-less LXC/VM). Disk is **itemised per filesystem** from one
-  `df` pass with the same pseudo-FS exclusions as `disk-usage.sh` (so data
-  volumes show up next to `/`); `METRICS_MOUNTS=auto` reports all, an explicit
-  list pins specific mounts. It never exits on its own — SIGTERM on teardown.
-  Don't add a param expecting a one-shot run; it's a stream.
-- **Always-on, in-memory collector.** `metrics.collector.ts` starts at boot
-  (isolated from the fatal `listen` path like the job scheduler — **must never
-  take down the API**) and holds one `streamMetrics` SSH connection per watched
-  node, pushing samples into a **per-node ring buffer capped by `retention`**.
-  No persistence, no DB — a restart refills in seconds (clone-and-go). A dropped
-  stream marks the node `down` and reconnects on a backoff; a per-node failure
-  never affects the others or the API.
-- **Browsers read the buffer, never SSH.** `GET /api/metrics` is a snapshot for
-  first paint; `GET /ws/metrics` sends that snapshot then forwards live
-  `sample`/`status` events. Both are auth-gated by the global guard. The UI
-  (`useMetrics`) caps its own copy to the same window. One shared collector
-  feeds every tab/device — opening the dashboard doesn't open new connections.
-- **`paths:` = du-sampled directories** (per node, label → absolute path) for
-  dirs that are *not* mounts — e.g. k3s local-path-provisioner PVCs — so the
-  `df` pass can't itemise them. No capacity exists (local-path PVCs aren't
-  quota'd) ⇒ samples carry **absolute GiB used only** (`paths: [{label, path,
-  used}]`), charted on an autoscaled axis, no threshold. `used: null` marks a
-  missing/unreadable dir (kept visible, like `temp: null`). du is expensive, so
-  the probe samples paths every 12th tick (≈60 s at the default interval) —
-  incl. tick 0 — and carries the cached value into the samples in between; a du
-  over a huge tree can delay that one sample, never kill the stream. Labels are
-  restricted to `A-Za-z0-9._-` by the loader (they travel raw inside the
-  `label=path` prelude lines and the probe's printf-built JSON — that check is
-  the only sanitisation, keep it). The prelude is per-node (`METRICS_PATHS`).
-- **`inspect:` = drill-down runbooks** shown as buttons in a node's detail view
-  ("what's eating CPU right now?"). Each id is an ordinary runbook in
-  `config/scripts/` — that's the plugin system: a new probe is just a new
-  script (it'll also appear in the runbook console; intended). A node's list
-  **replaces** `default`; unknown runbook/node ids warn + drop (same lenient
-  stance as `nodes:`). Runs go over the existing auth-gated `/ws/run` +
-  `useSshStream` + `Terminal` — zero bespoke exec plumbing (`InspectPanel` in
-  `ui/src/metrics/`). Ships with `top-cpu` (ps by cpu/mem) and `k3s-top`
-  (kubectl top, degrades when metrics-server is absent).
-- **`panels:` = rich detail-view panels** per node (map node id → panel ids,
-  validated against the known set — only `k3s` exists; enable it on the node
-  that holds the kubeconfig, i.e. the control plane — data is cluster-wide).
-  The k3s panel is the "what's eating CPU" workload visualisation: per-workload
-  CPU/mem (prominent values + comparator bars scaled to the biggest consumer in
-  view; red when hot vs node allocatable × the dashboard thresholds) with an
-  in-place click-through to a per-namespace pods table (a client-side filter of
-  the same payload — zero extra fetches). **Data path: no kubectl.**
-  `k8s.client.ts` SSHes in, reads the kubeconfig (k3s/kubectl/kubeadm/microk8s
-  paths), then port-forwards through the same SSH connection to the cluster API
-  and speaks HTTPS+mTLS directly. **Streaming, panel-scoped:** one
-  `/ws/k8s/workloads` connection per open panel holds one SSH session (connect
-  + kubeconfig paid once, NOT per refresh — load-bearing for distant hosts) and
-  loops ~20 s cycles: nodes/pods/metrics fetched in parallel, `alloc` +
-  `structure` events emitted as each lands (fast first paint), then the
-  authoritative `snapshot`; any client frame forces an immediate cycle; the UI
-  reconnects on a backoff and keeps the last good snapshot through errors.
-  Parsing/aggregation is `k8s.parse.ts` (pure, fixture-testable): pods grouped
-  by top-level owner (ReplicaSet→Deployment via pod-template-hash strip;
-  `name-<epoch>` Jobs→CronJob — documented heuristics) with an exact pod→
-  workload index for the metrics overlay (don't regress to name-prefix
-  matching). The route 403s for nodes without the panel (not an open k8s-API
-  proxy), is connection-scoped and fully wrapped (can't take down the API), and
-  degrades: metrics API absent ⇒ structure renders with `—` usage; cluster down
-  ⇒ inline error. No history/ring buffer by design. (A future SSH/kubectl
-  fallback may return for hosts where the kubeconfig/API path doesn't work.)
-- **Charts are visx** (D3 scales/shapes as React primitives) styled to the
-  brutalist tokens — thin ink line, flat accent fill, monospace ticks, no
-  gradients/shadows. `MetricChart` has `spark` (tile) and `full` (axed detail)
-  variants. Threshold colours the line/bar red; **alerting still lives in jobs**
-  (a disk/temp watchdog), not here — thresholds are display-only.
-- **Mobile** gets a 4th tab (`dash`); the same `Dashboard` renders single-column
-  via `.m-app .dash` token remap + grid override. Detail uses native scroll.
+- **Zero-install probe:** `config/scripts/metrics-stream.sh` is a normal
+  runbook that *loops*, emitting NDJSON from `/proc` + `/sys` + `df`. It's a
+  stream — never add a param expecting a one-shot run.
+- **Always-on in-memory collector:** one SSH connection per watched node into a
+  per-node ring buffer; browsers read the buffer (`/api/metrics` +
+  `/ws/metrics`), never SSH. Per-node failures reconnect on a backoff and
+  never affect the others or the API.
+- **Thresholds are display-only** — alerting lives in jobs (a disk/temp
+  watchdog), not here.
+- `inspect:` = drill-down runbooks (ordinary scripts — that's the plugin
+  system); `panels:` = rich detail panels (only `k3s` exists).
+- Full config reference + probe/collector/`paths:` invariants:
+  `api/src/metrics/CLAUDE.md`. The k3s panel (SSH port-forward to the cluster
+  API, no kubectl, streaming WS): `api/src/k8s/CLAUDE.md`.
 
 ## AI assistant — Azure OpenAI
 
-Optional AI features (`api/src/ai/`, UI in `ui/src/jobs/Investigation.tsx`),
-talking to an **Azure OpenAI** deployment over the chat-completions REST API
-directly — plain `fetch`, no SDK (same ethos as `ntfy.ts`).
+Optional AI features (`api/src/ai/`): an interactive per-server chat
+(`/ws/ai/chat`, tool-calling loop running bash over SSH) and an **on-demand**
+jobs investigator (read-only agentic loop over a failed check's context).
+Env-driven (`AZURE_OPENAI_*`); unset ⇒ disabled, the API still runs, the UI
+hides its affordances — clone-and-go holds.
 
-- **Env-driven, never hard-fails.** `ai.config.ts` reads `AZURE_OPENAI_ENDPOINT`
-  / `_API_KEY` / `_DEPLOYMENT` / `_API_VERSION` (+ optional `_REASONING_EFFORT`)
-  from `.env`. Unset ⇒ `enabled: false`, the API still runs, AI no-ops, and the
-  UI hides its affordances — the clone-and-go property holds (like ntfy, unlike
-  the load-bearing `auth.config.ts`).
-- **Reasoning-model client.** The deployment is `o4-mini` (a reasoning model):
-  the client sends `max_completion_tokens` (NOT `max_tokens`), **omits
-  `temperature`** (it rejects a non-default), and may pass `reasoning_effort`.
-  `max_completion_tokens` must stay generous — the model spends tokens on hidden
-  reasoning before visible output, so a tight cap returns empty content.
-  `chatRaw` returns the raw assistant message (incl. `tool_calls`) for the
-  agentic loop; `chat` wraps it for one-shot text. See [secrets ref in memory].
-
-### Interactive chat (`ai.chat.ts`, UI `ui/src/ai/`)
-
-A live tool-calling loop over `/ws/ai/chat` — the client owns history (stateless
-server), sends `{ history, userMessage }` frames, and the server streams
-`status`/`text`/`cmd`/`output` events, ending each turn with `done`. `run_command`
-runs bash on the target over SSH; a minimal denylist (`ai.chat.ts`) backstops the
-permissive `ASSISTANT` prompt (a human is directing, so service restarts / edits
-are allowed, unlike the read-only investigator).
-
-- **Per-server context.** The target's `ai:` note (Server YAML) plus its
-  name/host/user are folded into the system prompt (`serverContext()`), so the
-  model knows e.g. "this LXC runs docker-compose" without being told each turn.
-- **Cancel mid-turn.** The client can send a `{ type: 'cancel' }` control frame;
-  the route aborts the in-flight model call (an `AbortSignal` threaded into
-  `chatRaw`'s `fetch`) and the loop stops at the next model-call boundary. Abort
-  is deliberately checked only at boundaries so `newMessages` always ends on a
-  complete assistant/tool pairing — the partial turn is kept (valid history,
-  work preserved), and `done` carries `cancelled: true` (UI shows "stopped",
-  re-enables input). The Stop button (`ChatSession`) replaces Send while busy.
-
-### Jobs AI Investigator (`ai.investigate.ts`)
-
-An agentic loop that correlates *what was happening on the box* when a job's
-check fails. **On demand only — it does NOT fire automatically.** You trigger it
-per-host from the Jobs UI ("Investigate" → `POST /api/jobs/:id/investigate`),
-which builds context from that target's **last run** and runs the loop. (Manual
-trigger was a deliberate choice — a flapping check, e.g. a host that stays hot,
-would otherwise spiral into an investigation every tick. If auto-firing is ever
-reintroduced, gate it behind a per-host cooldown.)
-
-- **`investigate:`** in a job (`config/jobs/*.yaml`) is an *optional intent hint*
-  for those manual runs — `true`, or a string describing what to focus on (e.g.
-  "correlate the high temp with what's running"). The loader splits a string into
-  `investigate: true` + `investigateHint`; omitted ⇒ the AI infers intent from
-  the script + output + metrics. It no longer gates anything: the UI shows the
-  Investigate affordance for any job whenever AI is configured.
-- The model is given the failure context — the job's + runbook's descriptions,
-  the optional intent hint, the check script + output, the target, and recent
-  metrics from `getSnapshot()` — and one tool, `run_probe(purpose, bash)`. It
-  runs a *varying* number of **read-only** probes (`collectScript` over SSH),
-  reads each result, decides the next, then stops and summarises.
-- The transcript is buffered in an **in-memory registry** (no persistence — lost
-  on restart, by design) and surfaced live over `GET /ws/ai/investigate?id=`
-  (snapshot-then-forward like `/ws/metrics`) + `GET /api/ai/investigations/:id`.
-  `GET /api/jobs` overlays each target's latest investigation status/summary.
-  Manual runs **suppress** the follow-up ntfy (no phone spam while iterating);
-  the push path remains for any future auto-trigger.
-- **Auxiliary — must never take down the API.** Started fire-and-forget; the loop
-  never throws into its caller (same stance as jobs / metrics).
-
-**SAFETY IS PARAMOUNT (the user stressed this).** AI-generated bash runs on real
-servers — there is no sandbox. Two aligned layers, *keep them in sync if either
-changes*: (1) PRIMARY — the emphatic read-only system prompt (`INVESTIGATOR` in
-`ai.prompts.ts`): never delete/modify/create files (even temp ones), never write
-via redirects, **never download from the network** (`curl … | bash`), never
-install/control services. (2) BACKSTOP — a command-position denylist in
-`ai.investigate.ts` (rejected probes are reported back to the model, not run) +
-a per-probe `timeout` wrapper + an iteration cap. It is **not** a sandbox; it's
-defence-in-depth behind the prompt, which is why the feature is opt-in.
+**SAFETY IS PARAMOUNT (the user stressed this).** AI-generated bash runs on
+real servers — there is no sandbox. The investigator is read-only via two
+aligned layers (emphatic system prompt + a denylist backstop) that must stay in
+sync; the chat is permissive (human-directed) behind a minimal denylist. **Read
+`api/src/ai/CLAUDE.md` before touching anything in `ai/`** — it documents the
+client quirks (o4-mini reasoning model), the chat/investigator protocols, and
+the safety layers.
 
 ## Secrets
 
