@@ -59,8 +59,11 @@ kubectl -n home-server-mgr rollout restart deployment/home-server-mgr-api
 This same Secret holds **two groups of keys**, both pulled in by the API pod's
 `envFrom: secretRef` (so **no Deployment edit is needed** when you add a key):
 
-1. Any `${VAR}` interpolations used in `config/servers/*.yaml` (hosts,
-   passphrases, passwords) — key name must match the `${VAR}` name exactly.
+1. Any `${VAR}` interpolations used in `config/servers/*.yaml` or
+   `config/media.yaml` (hosts, passphrases, passwords, API keys) — key name
+   must match the `${VAR}` name exactly. The media view's keys are
+   `RADARR_API_KEY`, `SONARR_API_KEY`, `PLEX_TOKEN`; unlike auth they're
+   optional — missing ⇒ that service is disabled and the UI hides the view.
 2. The **Discord OAuth + session** vars the auth layer requires:
    `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`,
    `SESSION_SECRET` (≥32 chars), `SESSION_SALT` (exactly 16 chars). The API
@@ -86,6 +89,15 @@ whole Secret**, so always re-run it with the *full* set of keys — drop one and
 it's gone. (`openssl rand -hex 8` is exactly 16 chars; `-hex 24` is 48, ≥32.)
 Rotating `SESSION_SECRET`/`SESSION_SALT` invalidates existing login cookies —
 you just sign in again.
+
+To **add** keys without retyping the existing set, patch instead — `stringData`
+merges, leaving other keys intact:
+
+```bash
+kubectl -n home-server-mgr patch secret home-server-mgr-secrets --type=merge -p \
+  '{"stringData":{"RADARR_API_KEY":"<key>","SONARR_API_KEY":"<key>","PLEX_TOKEN":"<token>"}}'
+kubectl -n home-server-mgr rollout restart deployment/home-server-mgr-api
+```
 
 Verify:
 

@@ -70,6 +70,14 @@ spec:
               mountPath: /config/dashboard.yaml
               subPath: dashboard.yaml
               readOnly: true
+            # media.yaml also sits at the config root — same subPath treatment
+            # as dashboard.yaml. The RADARR/SONARR/PLEX keys it references ride
+            # in via the home-server-mgr-secrets envFrom above; without them the
+            # media view just stays disabled (per-service lenient gating).
+            - name: media-config
+              mountPath: /config/media.yaml
+              subPath: media.yaml
+              readOnly: true
             - name: ssh-keys
               mountPath: /home/app/.ssh
               readOnly: true
@@ -100,6 +108,9 @@ spec:
         - name: dashboard-config
           configMap:
             name: home-server-mgr-dashboard
+        - name: media-config
+          configMap:
+            name: home-server-mgr-media
         - name: ssh-keys
           secret:
             secretName: home-server-mgr-ssh
