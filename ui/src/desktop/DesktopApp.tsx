@@ -17,9 +17,11 @@ import { useRunbookParams } from '../runbooks/useRunbookParams.ts';
 import { useSshStream } from '../terminal/useSshStream.ts';
 import { useShellStream } from '../terminal/useShellStream.ts';
 import { useAiStatus } from '../jobs/useAiStatus.ts';
+import { MediaView } from '../media/MediaView.tsx';
+import { useMediaStatus } from '../media/useMediaStatus.ts';
 
 type Mode = 'runbook' | 'shell' | 'chat';
-type TopView = 'console' | 'jobs' | 'dashboard';
+type TopView = 'console' | 'jobs' | 'dashboard' | 'media';
 
 const RUN_STATUS_LABEL: Record<string, string> = {
   idle:       'ready',
@@ -42,6 +44,8 @@ export function DesktopApp() {
   const { runbooks } = useRunbooks();
   const aiStatus = useAiStatus();
   const aiEnabled = aiStatus?.enabled ?? false;
+  const mediaStatus = useMediaStatus();
+  const mediaEnabled = mediaStatus?.enabled ?? false;
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,6 +56,7 @@ export function DesktopApp() {
   // layout takes over.
   const topView: TopView = location.pathname.startsWith('/jobs') ? 'jobs'
     : location.pathname.startsWith('/dashboard') ? 'dashboard'
+    : location.pathname.startsWith('/media') ? 'media'
     : 'console';
 
   // Selections live in the query string so refresh + share + back-button work.
@@ -63,6 +68,7 @@ export function DesktopApp() {
   const setTopView = useCallback((v: TopView) => {
     if (v === 'jobs') navigate('/jobs');
     else if (v === 'dashboard') navigate('/dashboard');
+    else if (v === 'media') navigate('/media');
     else navigate({ pathname: '/console', search: location.search });
   }, [navigate, location.search]);
 
@@ -192,13 +198,17 @@ export function DesktopApp() {
         <nav className="top-nav">
           <button data-active={topView === 'console'} onClick={() => setTopView('console')}>console</button>
           <button data-active={topView === 'dashboard'} onClick={() => setTopView('dashboard')}>dashboard</button>
+          {mediaEnabled && (
+            <button data-active={topView === 'media'} onClick={() => setTopView('media')}>media</button>
+          )}
           <button data-active={topView === 'jobs'} onClick={() => setTopView('jobs')}>jobs</button>
         </nav>
         <span className="meta">{allServers.length} nodes · {groups.length} groups · {runbooks.length} runbooks</span>
         <a className="signout" href="/api/auth/logout">sign out</a>
       </header>
 
-      {topView === 'jobs' ? <JobsView /> : topView === 'dashboard' ? <Dashboard /> : (
+      {topView === 'jobs' ? <JobsView /> : topView === 'dashboard' ? <Dashboard />
+        : topView === 'media' ? <MediaView /> : (
       <div className={`workspace${mode === 'chat' ? ' no-rail' : ''}`}>
         <ServerRail groups={groups} selectedId={serverId} onSelect={selectServer} />
 

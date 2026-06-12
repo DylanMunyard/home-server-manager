@@ -18,9 +18,12 @@ export default function App() {
   // and navigates from there.
   useEffect(() => {
     if (status !== 'authed') return;
-    if (isMobile && !location.pathname.startsWith('/m')) {
+    // NB: match the mobile prefix exactly — a bare startsWith('/m') also
+    // catches desktop's /media.
+    const isMobilePath = location.pathname === '/m' || location.pathname.startsWith('/m/');
+    if (isMobile && !isMobilePath) {
       navigate('/m/books', { replace: true });
-    } else if (!isMobile && location.pathname.startsWith('/m')) {
+    } else if (!isMobile && isMobilePath) {
       navigate('/console', { replace: true });
     } else if (!isMobile && location.pathname === '/') {
       navigate('/console', { replace: true });

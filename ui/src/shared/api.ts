@@ -360,6 +360,88 @@ export async function deleteFile(server: string, path: string): Promise<{ ok: bo
   return r.json();
 }
 
+// ── Media cleanup ───────────────────────────────────────────────
+// Mirror of api/src/media/media.types.ts — the Radarr/Sonarr/Plex disk-triage
+// snapshot. Deletes are arr-managed and require `confirm: true` in the body
+// (server-side backstop behind the UI dialog).
+export type MediaServiceId = 'radarr' | 'sonarr' | 'plex';
+export type MediaServiceState =
+  | { state: 'ok' }
+  | { state: 'disabled'; reason: string }
+  | { state: 'error'; error: string };
+export type PlexMovieWatch = { viewCount: number; lastViewedAt: number | null };
+export type PlexShowWatch = { leafCount: number; viewedLeafCount: number; lastViewedAt: number | null };
+export type PlexSeasonWatch = { leafCount: number; viewedLeafCount: number };
+export type MovieItem = {
+  id: number; title: string; year: number;
+  sizeOnDisk: number; monitored: boolean; added: string; path: string;
+  tmdbId?: number; imdbId?: string;
+  overview?: string; runtime?: number; genres?: string[];
+  ratings: { imdb?: number; tmdb?: number; rottenTomatoes?: number; metacritic?: number };
+  plex: PlexMovieWatch | null;       // null = no Plex match → "no plex data" badge
+};
+export type SeasonItem = {
+  seasonNumber: number; monitored: boolean;
+  sizeOnDisk: number; episodeFileCount: number; totalEpisodeCount: number;
+  plex: PlexSeasonWatch | null;
+};
+export type SeriesItem = {
+  id: number; title: string; year: number; tvdbId?: number; imdbId?: string;
+  monitored: boolean; ended: boolean; added: string; path: string;
+  sizeOnDisk: number; episodeFileCount: number; totalEpisodeCount: number;
+  rating?: number;                   // single tvdb value — no RT/IMDb for TV
+  overview?: string; runtime?: number; genres?: string[];
+  seasons: SeasonItem[];
+  plex: PlexShowWatch | null;
+};
+export type MediaSnapshot = {
+  fetchedAt: number;
+  services: Record<MediaServiceId, MediaServiceState>;
+  movies: MovieItem[];
+  series: SeriesItem[];
+};
+export type MediaStatus = { enabled: boolean; services: Record<MediaServiceId, boolean> };
+
+export async function fetchMediaStatus(): Promise<MediaStatus> {
+  const r = await apiGet('/api/media/status', 'failed to load media status');
+  return r.json();
+}
+
+export async function fetchMedia(): Promise<MediaSnapshot> {
+  const r = await apiGet('/api/media', 'failed to load media library');
+  return r.json();
+}
+
+export async function refreshMedia(): Promise<MediaSnapshot> {
+  const r = await apiPost('/api/media/refresh', 'failed to refresh media library');
+  return r.json();
+}
+
+// Arr-managed deletes. Same {ok,error?} pass-through shape as deleteFile so the
+// caller can surface the upstream reason inline.
+async function mediaDelete(path: string, body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  const r = await fetch(path, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ confirm: true, ...body }),
+  });
+  if (r.status === 401) {
+    window.location.href = '/api/auth/login';
+    return new Promise(() => {});
+  }
+  return r.json();
+}
+
+export function deleteMovie(id: number, addImportExclusion: boolean) {
+  return mediaDelete(`/api/media/movie/${id}`, { addImportExclusion });
+}
+export function deleteSeries(id: number) {
+  return mediaDelete(`/api/media/series/${id}`, {});
+}
+export function deleteSeason(seriesId: number, seasonNumber: number) {
+  return mediaDelete(`/api/media/series/${seriesId}/season/${seasonNumber}`, {});
+}
+
 // Triggers a job off-schedule; resolves with the updated job (incl. fresh state).
 // `force` ("Test fire") makes the engine treat the `when` gate as tripped, so
 // the `then` chain runs for real and the real alerts fire — the honest way to

@@ -1083,3 +1083,112 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .chat-send.stop:hover { background: var(--ink); color: var(--bg); }
 .inv-chat-btn { font: inherit; font-size: 11px; padding: 4px 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; text-transform: uppercase; letter-spacing: 0.07em; }
 .inv-chat-btn:hover { background: var(--ink); color: var(--bg); }
+
+/* ── Media triage (Radarr/Sonarr/Plex disk cleanup) ──────────────
+ * Shared by both shells like .dash: desktop token names, .m-app remap below. */
+.media { height: 100%; overflow-y: auto; padding: 18px 22px 40px; }
+.media-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.media-head h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.04em; text-transform: lowercase; }
+.media-meta { display: flex; align-items: baseline; gap: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.media-refresh { padding: 4px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+.media-refresh:disabled { opacity: 0.5; cursor: default; }
+
+.media-services { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.media-chip { font-size: 11px; padding: 3px 8px; border: 1px dashed var(--line); color: var(--ink-3); }
+.media-chip[data-state="error"] { border-color: var(--err); color: var(--err); border-style: solid; }
+.media-err { padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--err); color: var(--err); font-size: 12px; }
+.media-msg { padding: 22px; color: var(--ink-3); font-size: 12px; border: 1px dashed var(--line-soft); }
+
+.media-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.media-ctl-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-right: 2px; }
+.media-ctl-gap { margin-left: 14px; }
+.media-ctl { padding: 4px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+.media-ctl[data-on="true"] { background: var(--ink); color: var(--bg); }
+
+.media-ctl-kind { font-weight: 700; }
+.media-list { display: flex; flex-direction: column; }
+
+/* Sortable header row — same grid as the rows; active column shows ▲/▼. */
+.media-hrow { border-bottom: 1px solid var(--line); padding: 4px 6px; }
+.media-hrow:hover { background: transparent; }
+.media-h {
+  background: transparent; border: 0; padding: 0; cursor: pointer;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3);
+  font-weight: 400;
+}
+.media-h:hover { color: var(--ink); background: transparent; }
+.media-h[data-on="true"] { color: var(--ink); font-weight: 700; }
+/* Header cells reuse the row's column classes for grid alignment but none of
+ * the value styling. */
+.media-h.media-title { text-align: left; }
+.media-h.media-badge { font-style: normal; text-align: left; }
+
+.media-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 84px 76px 130px 70px auto;
+  align-items: center; gap: 12px; padding: 7px 6px;
+  border-bottom: 1px solid var(--line-soft); font-size: 13px;
+}
+.media-row:hover { background: var(--bg-2); }
+.media-row[data-hot="true"] { box-shadow: inset 3px 0 0 var(--err); }
+.media-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-open { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.media-open:hover { text-decoration: underline; text-underline-offset: 2px; background: transparent; color: inherit; }
+.media-year { color: var(--ink-3); font-size: 11px; }
+.media-eps { color: var(--ink-3); font-size: 11px; margin-left: 8px; }
+.media-size { font-variant-numeric: tabular-nums; text-align: right; font-weight: 700; }
+.media-rating { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); }
+.media-rating i { font-style: normal; font-size: 10px; color: var(--ink-3); }
+.media-badge { font-size: 11px; color: var(--ink-3); }
+.media-badge[data-watch="never"] { color: var(--err); }
+.media-badge[data-watch="partial"] { color: var(--accent); }
+.media-badge[data-watch="watched"] { color: var(--ok); }
+.media-badge[data-watch="none"] { color: var(--ink-3); font-style: italic; }
+.media-added { font-size: 11px; color: var(--ink-3); text-align: right; font-variant-numeric: tabular-nums; }
+.media-del { padding: 4px 9px; font-size: 12px; color: var(--ink-3); background: transparent; border: 1px solid var(--line-soft); cursor: pointer; }
+.media-del:hover { background: var(--err); color: var(--bg); border-color: var(--err); }
+.media-del:disabled { opacity: 0.5; cursor: default; }
+
+/* Series detail (per-season triage) — natural height, page scroll. */
+.media-detail { display: flex; flex-direction: column; }
+.media-detail-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.media-back { padding: 5px 10px; font-size: 12px; }
+.media-detail-id b { font-size: 15px; }
+.media-detail-meta { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-bottom: 14px; font-variant-numeric: tabular-nums; }
+/* Detail metadata: big rating cells, genre line, summary, outbound links */
+.media-ratings { display: flex; gap: 18px; margin-bottom: 12px; }
+.media-ratecell { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; }
+.media-ratecell b { font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: 0; margin-right: 4px; }
+.media-genres { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-bottom: 10px; }
+.media-overview { margin: 0 0 14px; max-width: 72ch; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+.media-links { display: flex; gap: 8px; margin-bottom: 16px; }
+.media-link {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+  padding: 4px 10px; border: 1px solid var(--line); color: var(--ink); text-decoration: none;
+}
+.media-link:hover { background: var(--ink); color: var(--bg); }
+
+.media-seasons { display: flex; flex-direction: column; }
+.media-season-row {
+  display: grid; grid-template-columns: 110px 84px 90px minmax(0, 1fr) auto auto;
+  align-items: center; gap: 12px; padding: 7px 6px;
+  border-bottom: 1px solid var(--line-soft); font-size: 13px;
+}
+.media-season-row:hover { background: var(--bg-2); }
+.media-season-n { font-weight: 700; }
+.media-season-mon { font-size: 11px; color: var(--ink-3); text-align: right; }
+.media-detail-actions { margin-top: 18px; display: flex; justify-content: flex-end; }
+.media-del-all { padding: 7px 16px; }
+
+/* Checkbox row inside the movie confirm dialog */
+.media-exclude { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--ink-2); cursor: pointer; }
+
+/* 5-tab mobile bar (media adds a tab; class is count-derived in TabBar) */
+.m-tabbar.five { grid-template-columns: repeat(5, 1fr); }
+
+/* Mobile: cream palette remap + tighter grids (same trick as .m-app .dash) */
+.m-app .media { --ink: var(--m-ink); --ink-2: var(--m-ink-2); --ink-3: var(--m-ink-3); --line: var(--m-line); --line-soft: var(--m-line-soft); --err: var(--m-err); --ok: var(--m-ok); --accent: var(--m-hl); --bg: var(--m-paper); --bg-2: var(--m-paper-2); }
+/* Narrow rows: keep title + size + watch badge + delete. */
+.m-app .media-row { grid-template-columns: minmax(0, 1fr) 72px 96px auto; gap: 8px; }
+.m-app .media-row .media-rating, .m-app .media-row .media-added { display: none; }
+.m-app .media-season-row { grid-template-columns: 86px 72px minmax(0, 1fr) auto; gap: 8px; }
+.m-app .media-season-row > :nth-child(3), .m-app .media-season-mon { display: none; }

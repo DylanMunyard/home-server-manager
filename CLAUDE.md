@@ -19,11 +19,13 @@ config/
   scripts/*.sh      one file per runbook (see "Runbook scripts")
   jobs/*.yaml       one file per recurring job (see "Recurring jobs")
   dashboard.yaml    live-metrics dashboard config (see "Live dashboard")
+  media.yaml        Radarr/Sonarr/Plex endpoints (see "Media cleanup")
 dev/run.sh          starts both stacks with prefixed output (see "Verify")
 ```
 
 **Feature deep-dives live in nested `CLAUDE.md` files** — `api/src/runbooks/`,
-`api/src/jobs/`, `api/src/metrics/`, `api/src/k8s/`, `api/src/ai/`. Each covers
+`api/src/jobs/`, `api/src/metrics/`, `api/src/k8s/`, `api/src/ai/`,
+`api/src/media/`. Each covers
 its UI counterpart too. This root file keeps only cross-cutting rules + a
 summary per feature; **read the nested file before changing that feature**,
 even when you're only touching its `ui/src/` side.
@@ -181,6 +183,23 @@ sync; the chat is permissive (human-directed) behind a minimal denylist. **Read
 `api/src/ai/CLAUDE.md` before touching anything in `ai/`** — it documents the
 client quirks (o4-mini reasoning model), the chat/investigator protocols, and
 the safety layers.
+
+## Media cleanup — Radarr/Sonarr/Plex disk triage
+
+A "media" top-level view (`api/src/media/`, `ui/src/media/`) listing everything
+the arrs have on disk joined with Plex watch state + ratings, to decide what to
+delete. Config is `config/media.yaml` (urls + `${VAR}` keys; see `.env.example`).
+
+- **Env-gated per service, never fails boot** — an unset key disables just that
+  service (warn + degrade); both arr keys unset hides the view entirely. This is
+  a deliberate divergence from the server loader's fatal `${VAR}`.
+- **In-memory snapshot cache** (15-min TTL, single-flight, no persistence) —
+  browsers never hit the arrs/Plex directly.
+- **Deletes are arr-managed** (Radarr/Sonarr delete-with-files, season delete =
+  unmonitor-then-bulk-delete composite) and **confirm-gated twice**: UI dialog +
+  a required `confirm: true` body field server-side.
+- Full contract (join keys, cache semantics, delete invariants):
+  `api/src/media/CLAUDE.md`.
 
 ## Secrets
 

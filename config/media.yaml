@@ -1,0 +1,15 @@
+# Media cleanup — Radarr/Sonarr/Plex endpoints for the disk-triage view.
+# Each service is independently optional: an unset ${VAR} (or removing a
+# block) disables just that service — the API boots fine and the UI hides
+# what's missing. Plex without an arr is useless (nothing to list), but an
+# arr without Plex still works (watch state shows as "no plex data").
+# NB: block style, not flow maps — `${VAR}` is invalid YAML inside `{ ... }`.
+radarr:
+  url: http://192.168.1.225:7878
+  apiKey: ${RADARR_API_KEY}
+sonarr:
+  url: http://192.168.1.225:8989
+  apiKey: ${SONARR_API_KEY}
+plex:
+  url: http://192.168.1.36:32400
+  token: ${PLEX_TOKEN}

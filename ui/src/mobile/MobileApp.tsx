@@ -15,12 +15,18 @@ import { JobsScreen } from './JobsScreen.tsx';
 import { JobDetailScreen } from './JobDetailScreen.tsx';
 import { useJobs } from '../jobs/useJobs.ts';
 import { Dashboard } from '../metrics/Dashboard.tsx';
+import { MediaView } from '../media/MediaView.tsx';
+import { SeriesDetail } from '../media/SeriesDetail.tsx';
+import { MovieDetail } from '../media/MovieDetail.tsx';
+import { useMedia } from '../media/useMedia.ts';
+import { useMediaStatus } from '../media/useMediaStatus.ts';
 
 const TARGET_KEY = 'm.targetId';
 
 // What tab does this URL belong to? Drives the bottom TabBar highlight.
 function tabFromPath(pathname: string): MobileTab {
   if (pathname.startsWith('/m/dashboard')) return 'dashboard';
+  if (pathname.startsWith('/m/media')) return 'media';
   if (pathname.startsWith('/m/servers')) return 'servers';
   if (pathname.startsWith('/m/jobs')) return 'jobs';
   return 'books';
@@ -35,6 +41,8 @@ export function MobileApp() {
   const { groups, allServers } = useGroups();
   const { runbooks } = useRunbooks();
   const { jobs, run: runJobNow, runningId } = useJobs();
+  const mediaStatus = useMediaStatus();
+  const mediaEnabled = mediaStatus?.enabled ?? false;
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -90,6 +98,22 @@ export function MobileApp() {
           </Frame>
         } />
 
+        {/* MEDIA (disk triage — only routed when configured) */}
+        {mediaEnabled && (
+          <>
+            <Route path="/m/media" element={
+              <Frame top={<TopBar signOut meta="MEDIA" />}>
+                <MediaView
+                  onOpenSeries={(id) => navigate(`/m/media/series/${id}`)}
+                  onOpenMovie={(id) => navigate(`/m/media/movie/${id}`)}
+                />
+              </Frame>
+            } />
+            <Route path="/m/media/series/:seriesId" element={<MediaSeriesRoute />} />
+            <Route path="/m/media/movie/:movieId" element={<MediaMovieRoute />} />
+          </>
+        )}
+
         {/* SERVERS */}
         <Route path="/m/servers" element={
           <Frame top={<TopBar signOut meta={`${allServers.length}N · ${groups.length}G`} />}>
@@ -133,7 +157,9 @@ export function MobileApp() {
         <Route path="*" element={<Navigate to="/m/books" replace />} />
       </Routes>
 
-      {!fullscreenPath(location.pathname) && <TabBar active={currentTab} onChange={switchTab} />}
+      {!fullscreenPath(location.pathname) && (
+        <TabBar active={currentTab} onChange={switchTab} mediaEnabled={mediaEnabled} />
+      )}
     </div>
   );
 }
@@ -239,6 +265,80 @@ function ShellRoute({ allServers }: { allServers: ReturnType<typeof useGroups>['
       <TopBar onBack={() => navigate(-1)} backLabel="back" meta="SHELL" />
       <div className="m-screen-body">
         <ShellScreen target={server} onBack={() => navigate(-1)} />
+      </div>
+    </>
+  );
+}
+
+function MediaSeriesRoute() {
+  const { seriesId } = useParams();
+  const navigate = useNavigate();
+  const media = useMedia();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const id = Number(seriesId);
+  const series = media.snapshot?.series.find((s) => s.id === id) ?? null;
+  // Unknown id once loaded (e.g. deleted then back-button) → bounce to the list.
+  if (media.snapshot && !series) return <Navigate to="/m/media" replace />;
+  const doDelete = async (run: () => Promise<string | null>, closeOnOk = false) => {
+    setDeleteError(null);
+    const err = await run();
+    if (err) setDeleteError(err);
+    else if (closeOnOk) navigate('/m/media');
+  };
+  return (
+    <>
+      <TopBar onBack={() => navigate('/m/media')} backLabel="media" meta="SERIES" />
+      <div className="m-screen-body">
+        {/* .media wrapper = palette remap + the screen-height page scroller */}
+        <div className="media">
+          {deleteError && <div className="media-err">{deleteError}</div>}
+          {series ? (
+            <SeriesDetail
+              series={series}
+              deletingKey={media.deletingKey}
+              onDeleteSeason={(n) => doDelete(() => media.removeSeason(series.id, n))}
+              onDeleteSeries={() => doDelete(() => media.removeSeries(series.id), true)}
+              onClose={() => navigate('/m/media')}
+            />
+          ) : (
+            <div className="media-msg">loading…</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function MediaMovieRoute() {
+  const { movieId } = useParams();
+  const navigate = useNavigate();
+  const media = useMedia();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const id = Number(movieId);
+  const movie = media.snapshot?.movies.find((m) => m.id === id) ?? null;
+  if (media.snapshot && !movie) return <Navigate to="/m/media" replace />;
+  return (
+    <>
+      <TopBar onBack={() => navigate('/m/media')} backLabel="media" meta="MOVIE" />
+      <div className="m-screen-body">
+        <div className="media">
+          {deleteError && <div className="media-err">{deleteError}</div>}
+          {movie ? (
+            <MovieDetail
+              movie={movie}
+              deleting={media.deletingKey === `movie:${movie.id}`}
+              onDelete={async (exclude) => {
+                setDeleteError(null);
+                const err = await media.removeMovie(movie.id, exclude);
+                if (err) setDeleteError(err);
+                else navigate('/m/media');
+              }}
+              onClose={() => navigate('/m/media')}
+            />
+          ) : (
+            <div className="media-msg">loading…</div>
+          )}
+        </div>
       </div>
     </>
   );
