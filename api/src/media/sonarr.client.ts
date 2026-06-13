@@ -5,6 +5,8 @@ import { fetchCause } from './media.fetch.js';
 // object passthrough needed for the season-unmonitor PUT).
 export type SonarrSeasonStats = { sizeOnDisk?: number; episodeFileCount?: number; totalEpisodeCount?: number };
 export type SonarrSeason = { seasonNumber: number; monitored: boolean; statistics?: SonarrSeasonStats };
+// remoteUrl is the public source CDN (thetvdb/fanart); `url` is local to Sonarr.
+export type SonarrImage = { coverType?: string; url?: string; remoteUrl?: string };
 export type SonarrSeries = {
   id: number;
   title: string;
@@ -19,6 +21,7 @@ export type SonarrSeries = {
   overview?: string;
   runtime?: number;
   genres?: string[];
+  images?: SonarrImage[];
   statistics?: SonarrSeasonStats & { episodeCount?: number };
   seasons?: SonarrSeason[];
   [key: string]: unknown;  // PUT round-trips the full resource — preserve the rest

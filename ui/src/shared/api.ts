@@ -376,7 +376,7 @@ export type MovieItem = {
   id: number; title: string; year: number;
   sizeOnDisk: number; monitored: boolean; added: string; path: string;
   tmdbId?: number; imdbId?: string;
-  overview?: string; runtime?: number; genres?: string[];
+  overview?: string; runtime?: number; genres?: string[]; poster?: string;
   ratings: { imdb?: number; tmdb?: number; rottenTomatoes?: number; metacritic?: number };
   plex: PlexMovieWatch | null;       // null = no Plex match → "no plex data" badge
 };
@@ -390,7 +390,7 @@ export type SeriesItem = {
   monitored: boolean; ended: boolean; added: string; path: string;
   sizeOnDisk: number; episodeFileCount: number; totalEpisodeCount: number;
   rating?: number;                   // single tvdb value — no RT/IMDb for TV
-  overview?: string; runtime?: number; genres?: string[];
+  overview?: string; runtime?: number; genres?: string[]; poster?: string;
   seasons: SeasonItem[];
   plex: PlexShowWatch | null;
 };

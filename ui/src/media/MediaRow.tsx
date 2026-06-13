@@ -6,9 +6,17 @@ import { movieRating, movieWatchClass, seriesWatchClass, type WatchClass } from 
 // is the delete affordance and the "huge & never watched" highlight.
 
 const HUGE_BYTES = 20 * 1024 ** 3; // ≥20 GiB unwatched gets the highlight
+const ROW_GENRES = 3;              // genres shown inline before truncating
 
 function WatchBadge({ cls, label }: { cls: WatchClass; label: string }) {
   return <span className="media-badge" data-watch={cls}>{label}</span>;
+}
+
+// Compact genre line under the title (categories from the *arrs). Capped so a
+// many-genre title doesn't blow out the row; the detail view lists them all.
+function GenreLine({ genres }: { genres?: string[] }) {
+  if (!genres?.length) return null;
+  return <span className="media-genres-row">{genres.slice(0, ROW_GENRES).join(' · ')}</span>;
 }
 
 export function movieWatchLabel(m: MovieItem): string {
@@ -41,9 +49,12 @@ export function MovieRow({ movie, deleting, onDelete, onOpen }: {
   const hot = (cls === 'never' || cls === 'none') && movie.sizeOnDisk >= HUGE_BYTES;
   return (
     <div className="media-row" data-hot={hot}>
-      <button className="media-title media-open" onClick={onOpen}>
-        {movie.title} <span className="media-year">{movie.year || ''}</span>
-      </button>
+      <div className="media-titlecell">
+        <button className="media-title media-open" onClick={onOpen}>
+          {movie.title} <span className="media-year">{movie.year || ''}</span>
+        </button>
+        <GenreLine genres={movie.genres} />
+      </div>
       <span className="media-size">{humanSize(movie.sizeOnDisk)}</span>
       <span className="media-rating">
         {rating ? <>{rating.value.toFixed(1)} <i>{rating.source}</i></> : '—'}
@@ -67,10 +78,13 @@ export function SeriesRow({ series, deleting, onDelete, onOpen }: {
   const hot = (cls === 'never' || cls === 'none') && series.sizeOnDisk >= HUGE_BYTES;
   return (
     <div className="media-row" data-hot={hot}>
-      <button className="media-title media-open" onClick={onOpen}>
-        {series.title} <span className="media-year">{series.year || ''}</span>
-        <span className="media-eps">{series.episodeFileCount} files</span>
-      </button>
+      <div className="media-titlecell">
+        <button className="media-title media-open" onClick={onOpen}>
+          {series.title} <span className="media-year">{series.year || ''}</span>
+          <span className="media-eps">{series.episodeFileCount} files</span>
+        </button>
+        <GenreLine genres={series.genres} />
+      </div>
       <span className="media-size">{humanSize(series.sizeOnDisk)}</span>
       <span className="media-rating">
         {series.rating ? <>{series.rating.toFixed(1)} <i>tvdb</i></> : '—'}

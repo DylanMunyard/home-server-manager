@@ -69,6 +69,13 @@ function serviceState(
   return { state: 'ok' };
 }
 
+// Poster artwork for the detail view: the `poster` image's public source URL
+// (remoteUrl — a TMDB/thetvdb CDN link, browser-loadable). The arr-local `url`
+// needs the arr's API key + reachability, so we don't surface it.
+function posterUrl(images?: { coverType?: string; remoteUrl?: string }[]): string | undefined {
+  return images?.find((i) => i.coverType === 'poster')?.remoteUrl || undefined;
+}
+
 function joinMovies(raw: RadarrMovie[], plex: PlexLibrary | null): MovieItem[] {
   const byTmdb = new Map(plex?.movies.filter((m) => m.tmdbId).map((m) => [m.tmdbId!, m]) ?? []);
   const byImdb = new Map(plex?.movies.filter((m) => m.imdbId).map((m) => [m.imdbId!, m]) ?? []);
@@ -90,6 +97,7 @@ function joinMovies(raw: RadarrMovie[], plex: PlexLibrary | null): MovieItem[] {
         overview: m.overview || undefined,
         runtime: m.runtime || undefined,
         genres: m.genres?.length ? m.genres : undefined,
+        poster: posterUrl(m.images),
         ratings: {
           imdb: m.ratings?.imdb?.value || undefined,
           tmdb: m.ratings?.tmdb?.value || undefined,
@@ -148,6 +156,7 @@ function joinSeries(raw: SonarrSeries[], plex: PlexLibrary | null): SeriesItem[]
         overview: s.overview || undefined,
         runtime: s.runtime || undefined,
         genres: s.genres?.length ? s.genres : undefined,
+        poster: posterUrl(s.images),
         seasons,
         plex: show
           ? { leafCount: show.leafCount, viewedLeafCount: show.viewedLeafCount, lastViewedAt: show.lastViewedAt }

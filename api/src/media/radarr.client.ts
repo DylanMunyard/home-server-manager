@@ -4,6 +4,9 @@ import { fetchCause } from './media.fetch.js';
 // Raw Radarr v3 resources — only the fields we read. Mapping to wire types
 // lives in media.aggregate.ts (k8s.client/k8s.parse split).
 export type RadarrRating = { votes?: number; value?: number };
+// coverType ∈ poster|fanart|banner…; remoteUrl is the public source CDN
+// (TMDB/fanart.tv) — browser-loadable, unlike `url` (local, needs the arr key).
+export type RadarrImage = { coverType?: string; url?: string; remoteUrl?: string };
 export type RadarrMovie = {
   id: number;
   title: string;
@@ -17,6 +20,7 @@ export type RadarrMovie = {
   overview?: string;
   runtime?: number;
   genres?: string[];
+  images?: RadarrImage[];
   ratings?: { imdb?: RadarrRating; tmdb?: RadarrRating; rottenTomatoes?: RadarrRating; metacritic?: RadarrRating };
 };
 

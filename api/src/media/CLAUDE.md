@@ -70,6 +70,22 @@ In-memory only, by design (no DB / clone-and-go): module-level snapshot +
 - **Sonarr ratings are a single tvdb `ratings.value`** — there is no RT/IMDb
   for TV; don't promise those columns. Radarr has the full set
   (imdb/tmdb/rt/metacritic), flattened to values server-side.
+- **Genres come from the *arrs** (`genres[]` on both the Radarr movie and Sonarr
+  series resource), so they survive a Plex-less checkout. Shown in the detail
+  views + each list row, and filterable via the genre `<select>` in
+  `MediaView` (`collectGenres`/`matchesGenre` in `mediaSelect.ts`).
+- **Poster art = the arr image's `remoteUrl`** (a public TMDB/thetvdb CDN link),
+  mapped to `poster` by `posterUrl()` and shown only in the detail view. The
+  arr-local `images[].url` needs the arr API key + reachability, so we never use
+  it — the browser loads `remoteUrl` straight from the CDN (consistent with
+  "browsers never hit the arrs directly"). The `<Poster>` component hides itself
+  on a load error, so a dead URL degrades to no image, never a broken glyph.
+- **No actors/cast — by design.** Neither arr carries credits, and Plex only
+  exposes the `Role` tag via the per-item `/library/metadata/{key}` call. The
+  bulk `/library/sections/{key}/all` listing we pull carries `Genre` inline but
+  **not** `Role`/`Director`/`Writer`. Fetching cast would mean one request per
+  title (N+1 over HTTP) — the exact pattern this feature forbids — so the view
+  intentionally has no actor column. Don't add per-item Plex metadata calls.
 - Plex auth is `X-Plex-Token` + `Accept: application/json` (XML otherwise);
   the loader normalises the YAML's `token:` into `apiKey` internally.
 - Both shells render the same `MediaView`/`SeriesDetail` (`.m-app .media`

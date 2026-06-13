@@ -4,6 +4,7 @@ import { humanSize, relativeTime } from '../shared/format.ts';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
 import { externalLinks, movieWatchClass, runtimeLabel } from './mediaSelect.ts';
 import { movieWatchLabel } from './MediaRow.tsx';
+import { Poster } from './MediaPoster.tsx';
 
 // Movie drill-down — the "should I delete this?" card: every rating source at
 // its native scale, the plot summary, and a link out to the full page online.
@@ -34,24 +35,29 @@ export function MovieDetail({ movie, deleting, onDelete, onClose }: {
         </div>
       </div>
 
-      <div className="media-detail-meta">
-        <span className="media-size">{humanSize(movie.sizeOnDisk)}</span>
-        <span className="media-badge" data-watch={movieWatchClass(movie)}>{movieWatchLabel(movie)}</span>
-        {movie.added && <span>added {relativeTime(Date.parse(movie.added) / 1000)}</span>}
-        {runtimeLabel(movie.runtime) && <span>{runtimeLabel(movie.runtime)}</span>}
-        {!movie.monitored && <span>unmonitored</span>}
-      </div>
+      <div className="media-detail-top">
+        <Poster src={movie.poster} alt={movie.title} />
+        <div className="media-detail-info">
+          <div className="media-detail-meta">
+            <span className="media-size">{humanSize(movie.sizeOnDisk)}</span>
+            <span className="media-badge" data-watch={movieWatchClass(movie)}>{movieWatchLabel(movie)}</span>
+            {movie.added && <span>added {relativeTime(Date.parse(movie.added) / 1000)}</span>}
+            {runtimeLabel(movie.runtime) && <span>{runtimeLabel(movie.runtime)}</span>}
+            {!movie.monitored && <span>unmonitored</span>}
+          </div>
 
-      {ratings.length > 0 && (
-        <div className="media-ratings">
-          {ratings.map((x) => (
-            <span className="media-ratecell" key={x.label}><b>{x.value}</b> {x.label}</span>
-          ))}
+          {ratings.length > 0 && (
+            <div className="media-ratings">
+              {ratings.map((x) => (
+                <span className="media-ratecell" key={x.label}><b>{x.value}</b> {x.label}</span>
+              ))}
+            </div>
+          )}
+
+          {movie.genres && <div className="media-genres">{movie.genres.join(' · ')}</div>}
+          {movie.overview && <p className="media-overview">{movie.overview}</p>}
         </div>
-      )}
-
-      {movie.genres && <div className="media-genres">{movie.genres.join(' · ')}</div>}
-      {movie.overview && <p className="media-overview">{movie.overview}</p>}
+      </div>
 
       <div className="media-links">
         {externalLinks(movie).map((l) => (

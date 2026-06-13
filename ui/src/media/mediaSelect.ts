@@ -61,6 +61,21 @@ export function runtimeLabel(minutes: number | undefined): string | null {
   return h ? `${h}h ${m ? `${m}m` : ''}`.trim() : `${m}m`;
 }
 
+// Distinct genres (categories) across a set of items, A→Z — powers the genre
+// filter dropdown. Genres come from the *arrs (Radarr/Sonarr supply them), so
+// they're present even when Plex isn't configured.
+export function collectGenres(items: (MovieItem | SeriesItem)[]): string[] {
+  const set = new Set<string>();
+  for (const it of items) for (const g of it.genres ?? []) set.add(g);
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// `all` (the sentinel) matches everything; otherwise the item must carry the genre.
+export function matchesGenre(item: MovieItem | SeriesItem, genre: string): boolean {
+  if (genre === 'all') return true;
+  return (item.genres ?? []).includes(genre);
+}
+
 // "no plex data" items surface under `all` AND `never` — the delete-FOMO case
 // must stay visible, not vanish because Plex never matched the title.
 export function matchesWatch(cls: WatchClass, filter: WatchFilter): boolean {

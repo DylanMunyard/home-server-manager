@@ -29,6 +29,7 @@ export type MovieItem = {
   overview?: string;          // arr-supplied plot summary, for the detail view
   runtime?: number;           // minutes
   genres?: string[];
+  poster?: string;            // public poster URL (arr image remoteUrl) for the detail view
   // Flattened ratings (value only) — Radarr exposes several sources.
   ratings: { imdb?: number; tmdb?: number; rottenTomatoes?: number; metacritic?: number };
   plex: PlexMovieWatch | null;
@@ -60,6 +61,7 @@ export type SeriesItem = {
   overview?: string;
   runtime?: number;           // minutes per episode
   genres?: string[];
+  poster?: string;            // public poster URL (arr image remoteUrl) for the detail view
   seasons: SeasonItem[];
   plex: PlexShowWatch | null;
 };

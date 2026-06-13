@@ -4,6 +4,7 @@ import { humanSize } from '../shared/format.ts';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
 import { seriesWatchLabel } from './MediaRow.tsx';
 import { externalLinks, runtimeLabel, seriesWatchClass } from './mediaSelect.ts';
+import { Poster } from './MediaPoster.tsx';
 
 // Per-season drill-down: drop just seasons 1–3 instead of the whole show.
 // Rendered inside the scrolling .media container (desktop) or a mobile screen
@@ -29,23 +30,28 @@ export function SeriesDetail({ series, deletingKey, onDeleteSeason, onDeleteSeri
         </div>
       </div>
 
-      <div className="media-detail-meta">
-        <span className="media-size">{humanSize(series.sizeOnDisk)}</span>
-        <span>{series.episodeFileCount}/{series.totalEpisodeCount} eps on disk</span>
-        <span className="media-badge" data-watch={seriesWatchClass(series)}>{seriesWatchLabel(series)}</span>
-        <span>{series.ended ? 'ended' : 'continuing'}</span>
-        {runtimeLabel(series.runtime) && <span>{runtimeLabel(series.runtime)}/ep</span>}
-        {!series.monitored && <span>unmonitored</span>}
-      </div>
+      <div className="media-detail-top">
+        <Poster src={series.poster} alt={series.title} />
+        <div className="media-detail-info">
+          <div className="media-detail-meta">
+            <span className="media-size">{humanSize(series.sizeOnDisk)}</span>
+            <span>{series.episodeFileCount}/{series.totalEpisodeCount} eps on disk</span>
+            <span className="media-badge" data-watch={seriesWatchClass(series)}>{seriesWatchLabel(series)}</span>
+            <span>{series.ended ? 'ended' : 'continuing'}</span>
+            {runtimeLabel(series.runtime) && <span>{runtimeLabel(series.runtime)}/ep</span>}
+            {!series.monitored && <span>unmonitored</span>}
+          </div>
 
-      {series.rating && (
-        <div className="media-ratings">
-          <span className="media-ratecell"><b>{series.rating.toFixed(1)}</b> tvdb</span>
+          {series.rating && (
+            <div className="media-ratings">
+              <span className="media-ratecell"><b>{series.rating.toFixed(1)}</b> tvdb</span>
+            </div>
+          )}
+
+          {series.genres && <div className="media-genres">{series.genres.join(' · ')}</div>}
+          {series.overview && <p className="media-overview">{series.overview}</p>}
         </div>
-      )}
-
-      {series.genres && <div className="media-genres">{series.genres.join(' · ')}</div>}
-      {series.overview && <p className="media-overview">{series.overview}</p>}
+      </div>
 
       <div className="media-links">
         {externalLinks(series).map((l) => (

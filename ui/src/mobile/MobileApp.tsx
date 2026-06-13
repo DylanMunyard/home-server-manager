@@ -43,6 +43,12 @@ export function MobileApp() {
   const { jobs, run: runJobNow, runningId } = useJobs();
   const mediaStatus = useMediaStatus();
   const mediaEnabled = mediaStatus?.enabled ?? false;
+  // While the status request is still in flight (`null`), keep the media routes
+  // mounted so a refresh on /m/media doesn't fall through to the `*` redirect and
+  // bounce to /m/books before we know media is enabled. Once it resolves to
+  // disabled the routes unmount and the catch-all takes over (a media-less
+  // checkout shouldn't sit on /m/media anyway).
+  const mediaRoutable = mediaStatus === null || mediaEnabled;
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -99,7 +105,7 @@ export function MobileApp() {
         } />
 
         {/* MEDIA (disk triage — only routed when configured) */}
-        {mediaEnabled && (
+        {mediaRoutable && (
           <>
             <Route path="/m/media" element={
               <Frame top={<TopBar signOut meta="MEDIA" />}>

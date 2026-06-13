@@ -208,7 +208,17 @@ export function DesktopApp() {
       </header>
 
       {topView === 'jobs' ? <JobsView /> : topView === 'dashboard' ? <Dashboard />
-        : topView === 'media' ? <MediaView /> : (
+        : topView === 'media' ? (
+          <MediaView
+            // Drill-down lives in the URL query (?movie=/?series=) so refresh +
+            // back-button keep the open title — same pattern as server/runbook.
+            openMovieId={searchParams.get('movie') ? Number(searchParams.get('movie')) : null}
+            openSeriesId={searchParams.get('series') ? Number(searchParams.get('series')) : null}
+            onOpenMovie={(id) => updateParams({ movie: String(id), series: null })}
+            onOpenSeries={(id) => updateParams({ series: String(id), movie: null })}
+            onCloseDetail={() => updateParams({ movie: null, series: null })}
+          />
+        ) : (
       <div className={`workspace${mode === 'chat' ? ' no-rail' : ''}`}>
         <ServerRail groups={groups} selectedId={serverId} onSelect={selectServer} />
 
