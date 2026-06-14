@@ -27,8 +27,9 @@ params:
   BREACH_COUNT: "5"              # consecutive 1-minute ticks before alerting
 
 notify:
-  on: [action, error]            # action = the alert with diagnostics attached;
-                                 # error = a diagnostic itself failed / SSH broke
+  on: [action]                   # action = the alert with diagnostics attached;
+                                 # error omitted — SSH handshake failures are
+                                 # transient and would spam when the box is up
   priority: high
 
 investigate: >
