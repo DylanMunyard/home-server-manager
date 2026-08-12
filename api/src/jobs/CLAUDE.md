@@ -48,9 +48,19 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   `/api/alerts/test` ("Test alert") is a synthetic push, nothing runs. Mind
   jobs whose `then` has side effects (vpn-watchdog resets the tunnel).
 - **Sustained/consecutive thresholds live in the check script, not here.** The
-  engine has no debounce concept on purpose — `temp-check` (time-based) and
-  `node-health` (count-based, per-signal) keep a tiny state file on the target
-  and exit nonzero exactly once per incident, re-arming on recovery.
+  engine has no debounce concept on purpose. Each check keeps a tiny state file
+  on the target and exits nonzero exactly once per incident:
+  `temp-check` (time-based sustain + hysteresis), `node-health` (per-signal —
+  BREACH_COUNT consecutive **OR** WINDOW_BREACHES-of-WINDOW_SIZE bursty, and it
+  re-arms only on a fully clean window), and `oom-check` (edge-triggered: a
+  timestamp watermark, so it reports each kernel OOM kill exactly once).
+- **Level vs edge checks.** Threshold checks (`node-health`, `temp-check`) watch
+  a value and can miss a problem that keeps *resolving itself* — an OOM kill
+  frees the memory that would have tripped the threshold, so a node being eaten
+  alive reads healthy between kills. Edge checks (`oom-check`) report events the
+  kernel already recorded, so they fire on the first occurrence. The two are
+  complementary; `bfstats-watchdog` and `oom-watchdog` run both against the same
+  host deliberately.
 - **Notify semantics:** `action` fires whenever the `then` chain runs
   (informational) — ONE combined push per target: the check's output (the
   trigger reason) plus a section per `then` runbook, each clipped so the body

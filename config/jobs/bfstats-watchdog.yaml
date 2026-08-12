@@ -25,6 +25,15 @@ params:
   WEB_URL: "https://bfstats.io"
   WEB_MAX_SECS: "2"
   BREACH_COUNT: "5"              # consecutive 1-minute ticks before alerting
+  WINDOW_SIZE: "15"              # ...OR 8 bad ticks in any 15-minute window,
+  WINDOW_BREACHES: "8"           # which is what catches a BURSTY problem: the
+                                 # Aug 2026 leak never breached 5 in a row
+                                 # because each OOM kill reset the counter
+  WINDOW_SIGNALS: "mem web"      # NOT cpu — stats collection legitimately
+                                 # bursts to a couple of cores and back to idle;
+                                 # windowing that would alert on healthy load.
+                                 # CPU still alerts on 5 consecutive saturated
+                                 # ticks via BREACH_COUNT.
 
 notify:
   on: [action]                   # action = the alert with diagnostics attached;

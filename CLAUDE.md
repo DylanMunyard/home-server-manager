@@ -133,7 +133,9 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   in a `Map` only, surfaced read-only at `GET /api/jobs`.
 - **Runbooks signal via exit code** — a check exits nonzero to mean "act"; the
   engine stays dumb, the logic lives in bash (incl. sustained/consecutive
-  debounce — see `temp-check` / `node-health`).
+  debounce — see `temp-check` / `node-health`). Threshold checks pair with
+  *edge* checks (`oom-check`) for failures that keep resolving themselves: an
+  OOM kill frees the very memory a threshold would have caught.
 - **`then` is a chain** — a list runs sequentially on trigger; the `action`
   alert is one combined push (check reason + a section per runbook), so a list
   of diagnostics (e.g. the dotnet scripts) turns an alert into an answer.

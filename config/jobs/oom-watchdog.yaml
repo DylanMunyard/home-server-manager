@@ -1,0 +1,44 @@
+name: OOM watchdog
+description: >
+  Page the moment the kernel OOM-kills anything, with the structural cause
+  attached — which containers are unbounded and what is burning CPU right now.
+schedule: "*/2 * * * *"          # edge-triggered + watermarked, so the cadence
+                                 # only sets latency; no event is ever missed
+target: hetzner/bfstats
+
+run: oom-check                   # reports kills SINCE THE LAST RUN, so it fires
+                                 # on the first one instead of waiting for a
+                                 # threshold to stay bad. Complements
+                                 # bfstats-watchdog, which watches the ramp-up:
+                                 # this one watches the wreckage.
+
+when:
+  exit: nonzero                  # new OOM kill(s), or an unclean reboot
+
+# Diagnostic, not remediation: the restarted process is usually already ramping
+# back up by the time this fires, so its managed stacks name the code path that
+# did the allocating. oom-check itself already reports the structural half
+# (global vs cgroup-scoped, and which pod owned the victim).
+then: dotnet-hot-threads
+
+params:
+  OOM_LOOKBACK_MINS: "15"        # only bounds the FIRST run after a reboot
+  FRAMES: "12"
+
+notify:
+  on: [action, error]
+  priority: max                  # a global OOM can take the node down; this is
+                                 # the one alert worth waking up for
+
+investigate: >
+  The kernel OOM-killed a process. Establish first whether it was a GLOBAL kill
+  (constraint=CONSTRAINT_NONE / global_oom — the container had no memory limit,
+  so the victim was chosen from the entire node and unrelated pods took
+  collateral damage) or a cgroup-scoped one (contained, working as intended).
+  For a global kill, name the unbounded container and the pod that owned the
+  victim. Then attribute the growth: correlate against recent deploys, and check
+  whether it is allocation churn, an unbounded work queue, or query volume
+  against SQLite. The August 2026 incident is the known prior — an uncapped
+  bf42-stats API container leaked under a gamification batch loop and crashed the
+  node twelve times before anyone noticed, because kubelet recorded every kill as
+  exitCode 255 / reason "Unknown" rather than OOMKilled.
