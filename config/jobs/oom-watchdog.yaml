@@ -1,7 +1,8 @@
 name: OOM watchdog
 description: >
-  Page the moment the kernel OOM-kills anything, with the structural cause
-  attached — which containers are unbounded and what is burning CPU right now.
+  Page the moment the kernel OOM-kills anything, naming the victim, its RSS, the
+  pod that owned it, and — the actionable part — whether the kill was contained
+  to a cgroup or went node-wide because the container had no memory limit.
 schedule: "*/2 * * * *"          # edge-triggered + watermarked, so the cadence
                                  # only sets latency; no event is ever missed
 target: hetzner/bfstats
@@ -12,21 +13,28 @@ run: oom-check                   # reports kills SINCE THE LAST RUN, so it fires
                                  # bfstats-watchdog, which watches the ramp-up:
                                  # this one watches the wreckage.
 
-when:
-  exit: nonzero                  # new OOM kill(s), or an unclean reboot
-
-# Diagnostic, not remediation: the restarted process is usually already ramping
-# back up by the time this fires, so its managed stacks name the code path that
-# did the allocating. oom-check itself already reports the structural half
-# (global vs cgroup-scoped, and which pod owned the victim).
-then: dotnet-hot-threads
+# Deliberately NO `then:` chain. Attaching a profiler here is both expensive and
+# useless: dotnet-hot-threads downloads a ~100MB tool, copies it into the target
+# container and attaches via nsenter — piling load onto a node that has just
+# been OOM-killed — and by the time it runs the victim has RESTARTED, so its
+# stacks show process startup rather than whatever did the allocating. The check
+# already carries everything actionable (global vs cgroup-scoped, victim, RSS,
+# owning pod). Digging deeper is an on-demand act, which is what `investigate:`
+# below and a manual dotnet-hot-threads run are for.
+#
+# And therefore NO `when:` either — that pairing is load-bearing, not an
+# omission. Per jobs.runner.ts, `action` only fires when a `then` chain runs,
+# and a failing check only counts as an `error` when the job has NO `when`
+# (a check WITH a `when` is treated as a trigger signal, not a failure). A
+# `when` with no `then` would therefore detect every OOM and alert on none of
+# them. With neither, the check IS the work: its nonzero exit is the alert.
 
 params:
   OOM_LOOKBACK_MINS: "15"        # only bounds the FIRST run after a reboot
-  FRAMES: "12"
 
 notify:
-  on: [action, error]
+  on: [error]                    # with no `then` chain there is no `action`
+                                 # event; the check's nonzero exit IS the alert
   priority: max                  # a global OOM can take the node down; this is
                                  # the one alert worth waking up for
 
