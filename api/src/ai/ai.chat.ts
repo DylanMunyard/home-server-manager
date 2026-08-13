@@ -1,5 +1,6 @@
 import { loadServer } from '../servers/servers.loader.js';
 import type { ServerConfig } from '../servers/servers.types.js';
+import { loadRunbooks } from '../runbooks/runbooks.loader.js';
 import { collectScript } from '../ssh/ssh.collect.js';
 import { chatRaw, type ConvoMessage, type ToolDef } from './ai.client.js';
 import { APP_CONTEXT, ASSISTANT } from './ai.prompts.js';
@@ -63,12 +64,19 @@ export async function runChatTurn(
     return { ok: false, error: `unknown target '${target}'`, messages: [] };
   }
 
+  const runbooks = await loadRunbooks();
+  const runbooksContext = runbooks.length > 0
+    ? `AVAILABLE RUNBOOKS (pre-authored scripts in config/scripts/):\n` +
+      runbooks.map((r) => `- ${r.id}: ${r.description || 'No description'}`).join('\n') +
+      `\n\nWhen diagnosing or troubleshooting, check if an existing runbook fits before crafting custom commands.`
+    : '';
+
   // Accumulate new turns to hand back to the caller (for the next turn).
   const newMessages: ConvoMessage[] = [{ role: 'user', content: userMessage }];
 
   // Full conversation the model sees (system not stored in history).
   const messages: ConvoMessage[] = [
-    { role: 'system', content: `${APP_CONTEXT}\n\n${ASSISTANT}\n\n${serverContext(server)}` },
+    { role: 'system', content: `${APP_CONTEXT}\n\n${ASSISTANT}\n\n${serverContext(server)}${runbooksContext ? `\n\n${runbooksContext}` : ''}` },
     ...history,
     { role: 'user', content: userMessage },
   ];

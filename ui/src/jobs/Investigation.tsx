@@ -160,7 +160,7 @@ export function JobInvestigations({ job, aiEnabled }: { job: Job; aiEnabled: boo
         <button onClick={trigger} disabled={busy || !aiEnabled}>
           {busy ? 'Starting…' : 'Investigate last run ▸'}
         </button>
-        <button onClick={() => openChat(target)} disabled={!aiEnabled} title="Open an interactive AI chat for this server">
+        <button onClick={() => openChat(target)} disabled={!aiEnabled} title="Open interactive AI chat for this server">
           Chat ▸
         </button>
         {!aiEnabled

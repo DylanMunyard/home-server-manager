@@ -106,7 +106,7 @@ export function JobDetailScreen({ job, checkRunbook, thenRunbooks, running, onRu
           <button className={`m-jtab ${activeTab === 'flow' ? 'on' : ''}`} onClick={() => setTab('flow')}>Flow</button>
           {showInvestigation && (
             <button className={`m-jtab ${activeTab === 'investigation' ? 'on' : ''}`} onClick={() => setTab('investigation')}>
-              AI{Object.values(job.state.targets).some((t) => t.investigation) && <span className="m-jtab-badge">●</span>}
+              AI Chat{Object.values(job.state.targets).some((t) => t.investigation) && <span className="m-jtab-badge">●</span>}
             </button>
           )}
         </div>
