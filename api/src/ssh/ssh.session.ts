@@ -85,3 +85,72 @@ export function runScript(
     done,
   };
 }
+export type RunEventRaw =
+  | { type: 'connect' }
+  | { type: 'stdout'; chunk: Buffer }
+  | { type: 'stderr'; data: string }
+  | { type: 'exit'; code: number | null; signal?: string | null }
+  | { type: 'error'; message: string };
+
+/**
+ * Like `runScript` but delivers stdout as raw `Buffer` chunks instead of
+ * UTF-8 decoded strings. Required for binary outputs (gzip, tar) where
+ * `toString('utf8')` would corrupt the data. Stderr is still decoded as text.
+ */
+export function runScriptRaw(
+  server: ServerConfig,
+  script: string,
+  onEvent: (e: RunEventRaw) => void,
+): RunHandle {
+  const conn = new Client();
+  let stream: ClientChannel | null = null;
+  let settled = false;
+
+  const done = new Promise<void>((resolve) => {
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      try { conn.end(); } catch { /* ignore */ }
+      resolve();
+    };
+
+    conn.on('ready', () => {
+      onEvent({ type: 'connect' });
+      conn.exec('bash -s', (err, s) => {
+        if (err) {
+          onEvent({ type: 'error', message: err.message });
+          finish();
+          return;
+        }
+        stream = s;
+        s.on('data', (chunk: Buffer) => onEvent({ type: 'stdout', chunk }));
+        s.stderr.on('data', (chunk: Buffer) => onEvent({ type: 'stderr', data: chunk.toString('utf8') }));
+        s.on('close', (code: number | null, signal: string | null) => {
+          onEvent({ type: 'exit', code, signal });
+          finish();
+        });
+        s.end(script);
+      });
+    });
+
+    conn.on('error', (err) => {
+      onEvent({ type: 'error', message: err.message });
+      finish();
+    });
+
+    buildConnectOptions(server)
+      .then((opts) => conn.connect(opts))
+      .catch((err: Error) => {
+        onEvent({ type: 'error', message: err.message });
+        finish();
+      });
+  });
+
+  return {
+    cancel: () => {
+      try { stream?.signal('TERM'); } catch { /* ignore */ }
+      try { conn.end(); } catch { /* ignore */ }
+    },
+    done,
+  };
+}

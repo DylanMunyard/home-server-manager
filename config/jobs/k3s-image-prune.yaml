@@ -1,0 +1,26 @@
+name: Image prune
+description: Reclaim disk on the k3s node by deleting untagged images left behind by CI pushes
+schedule: "0 4 1,15 * *"         # 04:00 on the 1st and 15th. Cron has no
+                                 # fortnightly, and "*/14" on day-of-month
+                                 # restarts each month (29th -> 1st is 3 days);
+                                 # twice-monthly is the honest approximation.
+target: hetzner/bfstats
+
+run: k3s-image-prune             # does the work and prints a reclaim report;
+                                 # exits nonzero only if deletions FAILED, so
+                                 # there's no `when`/`then` — this is
+                                 # maintenance, not a check that signals
+
+params:
+  PRUNE_REPOS: ""                # empty = every untagged image. The bfstats
+                                 # ui/api pair is the bulk (175 of 191), but
+                                 # seq/cloudflared/sqlite3 orphan copies too,
+                                 # and there's no reason to keep any of them.
+  PRUNE_DRY_RUN: "no"
+
+notify:
+  on: [error]                    # no `when`, so `error` = the runbook itself
+                                 # failed (or SSH did). A successful prune is
+                                 # silent by design; the reclaim report lives
+                                 # in the job's Last-run tab.
+  priority: default

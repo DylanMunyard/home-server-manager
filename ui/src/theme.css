@@ -265,6 +265,9 @@ button[data-variant="run"]:hover { background: var(--ink); color: var(--accent);
 .job-run-outcome.warn { color: var(--warn, #a06414); }
 .job-run-outcome.err  { color: var(--err); }
 .monitor-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; background: var(--ink-2); color: var(--bg); padding: 3px 8px; }
+.backup-divider { width: 1px; height: 24px; background: var(--line); align-self: center; margin: 0 4px; }
+button[data-variant="backup"] { font-size: 11px; letter-spacing: 0.06em; padding: 5px 12px; color: var(--ink-2); border-color: var(--line-soft); }
+button[data-variant="backup"]:hover { background: var(--ink); color: var(--bg); }
 
 .job-meta { display: flex; flex-wrap: wrap; gap: 28px; margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); }
 .job-meta-cell dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-3); margin: 0; }

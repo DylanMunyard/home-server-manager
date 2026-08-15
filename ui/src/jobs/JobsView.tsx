@@ -7,7 +7,7 @@ import { JobOutput } from './JobOutput.tsx';
 import { JobInvestigations } from './Investigation.tsx';
 import { useAiStatus } from './useAiStatus.ts';
 import { humanizeCron, summarizeJobRun, summarizeTarget, uiState } from './cron.ts';
-import { testAlert, type Job } from '../shared/api.ts';
+import { testAlert, downloadBackup, type Job } from '../shared/api.ts';
 
 // "proxmox" for a one-host job, "3 hosts" for a fan-out.
 function targetsLabel(job: Job): string {
@@ -43,6 +43,7 @@ export function JobsView() {
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<'output' | 'flow' | 'investigation'>('output');
+  const [backupBusy, setBackupBusy] = useState<'sqlite' | 'neo4j' | null>(null);
   const job = useMemo(() => jobs.find((j) => j.id === selId) ?? jobs[0] ?? null, [jobs, selId]);
 
   const sendTestAlert = async () => {
@@ -54,6 +55,20 @@ export function JobsView() {
     const r = await testAlert(job.run, job.targets[0]);
     setAlertBusy(false);
     setAlertMsg(r.sent ? 'test alert sent ✓' : `alert failed: ${r.reason ?? 'unknown'}`);
+  };
+
+  const handleBackup = (type: 'sqlite' | 'neo4j') => {
+    const label = type === 'sqlite' ? 'SQLite' : 'Neo4j';
+    const msg =
+      type === 'sqlite'
+        ? `This will stop the bf42-stats deployment for ~30–60s while the SQLite database is dumped and streamed to your browser. The app will restart automatically after the download begins. Continue?`
+        : `This will stop both the bf42-stats app and the Neo4j deployment for ~60–120s while the database is archived and streamed to your browser. Both will restart automatically after. Continue?`;
+    if (!window.confirm(`Download ${label} backup\n\n${msg}`)) return;
+    setBackupBusy(type);
+    downloadBackup(type);
+    // Reset busy state after a short delay — there's no completion event from
+    // the browser download API; the download continues independently.
+    setTimeout(() => setBackupBusy(null), 3000);
   };
 
   const checkRunbook = useRunbook(job?.run ?? null);
@@ -130,6 +145,27 @@ export function JobsView() {
                     return o && <span className={`job-run-outcome ${o.tone}`}>{o.text}</span>;
                   })()}
                   {!job.then?.length && <span className="monitor-tag">monitor only</span>}
+                  {job.id === 'bfstats-watchdog' && (
+                    <>
+                      <div className="backup-divider" />
+                      <button
+                        data-variant="backup"
+                        disabled={backupBusy !== null}
+                        onClick={() => handleBackup('sqlite')}
+                        title="Stop bf42-stats (~30–60s), dump SQLite to a .sql.gz file, restart"
+                      >
+                        {backupBusy === 'sqlite' ? 'Starting…' : '↓ SQLite backup'}
+                      </button>
+                      <button
+                        data-variant="backup"
+                        disabled={backupBusy !== null}
+                        onClick={() => handleBackup('neo4j')}
+                        title="Stop bf42-stats + Neo4j (~60–120s), archive Neo4j data dir, restart"
+                      >
+                        {backupBusy === 'neo4j' ? 'Starting…' : '↓ Neo4j backup'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 

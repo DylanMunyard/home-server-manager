@@ -16,6 +16,7 @@ import { filesRoutes } from './files/files.routes.js';
 import { k8sRoutes } from './k8s/k8s.routes.js';
 import { aiRoutes } from './ai/ai.routes.js';
 import { mediaRoutes } from './media/media.routes.js';
+import { backupRoutes } from './backup/backup.routes.js';
 
 const app = Fastify({ logger: true });
 
@@ -39,6 +40,7 @@ await app.register(aiRoutes);
 // Media cleanup is auxiliary: no boot-time work (the cache fills lazily on the
 // first GET) and the config loader never throws — can't take down the API.
 await app.register(mediaRoutes);
+await app.register(backupRoutes);
 
 app.get('/api/health', async () => ({ ok: true }));
 

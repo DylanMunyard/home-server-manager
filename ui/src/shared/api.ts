@@ -469,3 +469,19 @@ export async function testAlert(
   }
   return r.json();
 }
+
+/**
+ * Trigger a browser download of a bfstats database backup streamed live over
+ * SSH from the server. Opens the backup route URL in a hidden <a> so the
+ * session cookie is sent automatically and the browser saves the file.
+ * The download may take 30–120s depending on DB size.
+ */
+export function downloadBackup(type: 'sqlite' | 'neo4j'): void {
+  const a = document.createElement('a');
+  a.href = `/api/backup/bfstats-${type}`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  // Clean up after a tick so the click has time to fire.
+  setTimeout(() => document.body.removeChild(a), 100);
+}
