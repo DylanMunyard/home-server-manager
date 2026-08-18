@@ -81,3 +81,19 @@ export type JobRunState = {
   lastDurationMs?: number;
   targets: Record<string, TargetRunState>;
 };
+
+/** Rolled-up tone for one execution, worst-target-wins. See jobs.history.ts. */
+export type RunOutcome = 'ok' | 'warn' | 'err';
+
+/**
+ * One past execution of a job, kept for the History tab. Same per-target shape
+ * as `JobRunState.targets` plus the timing/outcome needed to list it. See
+ * jobs.history.ts for the in-memory retention policy (no persistence).
+ */
+export type JobHistoryEntry = {
+  runAt: string;              // ISO timestamp
+  durationMs: number;
+  forced: boolean;            // "Test fire" / manual force, not a real schedule tick
+  outcome: RunOutcome;
+  targets: Record<string, TargetRunState>;
+};

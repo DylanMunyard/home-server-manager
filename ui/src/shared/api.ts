@@ -103,12 +103,24 @@ export type TargetRunState = {
   investigation?: { id: string; status: InvestigationStatus; summary?: string };
 };
 
-// Mirrors the API's in-memory JobRunState. No history — single last-run snapshot
-// per target (keyed by global server id).
+// Mirrors the API's in-memory JobRunState — the current/most-recent snapshot
+// per target (keyed by global server id). Past runs: see JobHistoryEntry.
 export type JobRunState = {
   running: boolean;
   lastRunAt?: string;
   lastDurationMs?: number;
+  targets: Record<string, TargetRunState>;
+};
+
+// Mirrors the API's JobHistoryEntry (jobs.history.ts) — one past execution.
+// In-memory only: every non-'ok' run is kept (capped per job), plus the single
+// most recent 'ok' run. Fetched on demand via fetchJobHistory, not part of Job.
+export type RunOutcome = 'ok' | 'warn' | 'err';
+export type JobHistoryEntry = {
+  runAt: string;
+  durationMs: number;
+  forced: boolean;
+  outcome: RunOutcome;
   targets: Record<string, TargetRunState>;
 };
 
@@ -228,6 +240,14 @@ async function apiPost(path: string, errorMsg: string, body?: unknown): Promise<
 export async function fetchJobs(): Promise<Job[]> {
   const r = await apiGet('/api/jobs', 'failed to load jobs');
   return r.json();
+}
+
+// Past executions for one job — every non-clean run (capped) + the last clean
+// run. Fetched on demand (History tab), not part of the polled Job payload.
+export async function fetchJobHistory(id: string): Promise<JobHistoryEntry[]> {
+  const r = await apiGet(`/api/jobs/${encodeURIComponent(id)}/history`, 'failed to load job history');
+  const { entries } = await r.json();
+  return entries;
 }
 
 export async function fetchMetrics(): Promise<MetricsSnapshot> {

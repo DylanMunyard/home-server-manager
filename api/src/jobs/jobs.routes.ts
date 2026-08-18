@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { loadJobs, loadJob } from './jobs.loader.js';
 import { executeJob, getState } from './jobs.runner.js';
+import { getHistory } from './jobs.history.js';
 import { nextRuns } from './jobs.scheduler.js';
 import { latestForTarget, startInvestigation } from '../ai/ai.investigate.js';
 import { loadAiConfig } from '../ai/ai.config.js';
@@ -39,6 +40,15 @@ export async function jobsRoutes(app: FastifyInstance) {
     const job = await loadJob(req.params.id);
     if (!job) return reply.code(404).send({ error: 'not found' });
     return { ...job, nextRunAt: nextRuns()[job.id] ?? null, state: stateWithInvestigations(job.id) };
+  });
+
+  // Past executions — every non-clean run (failure or triggered remediation),
+  // capped per job, plus the single most recent clean run. See jobs.history.ts
+  // for the retention policy; this is in-memory only, reset on restart.
+  app.get<{ Params: { id: string } }>('/api/jobs/:id/history', async (req, reply) => {
+    const job = await loadJob(req.params.id);
+    if (!job) return reply.code(404).send({ error: 'not found' });
+    return { entries: getHistory(job.id) };
   });
 
   // Manual trigger — runs the job now, off-schedule. Awaits completion so the

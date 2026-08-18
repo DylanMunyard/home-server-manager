@@ -19,8 +19,21 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 
 - **In-memory scheduler, no persistence by design.** The scheduler lives in the
   API process (`jobs.scheduler.ts`, croner); on restart, schedules start fresh.
-  No DB, no run history, no state file — same clone-and-go property as the rest.
-  Holds last-run state in a `Map` only (surfaced read-only at `GET /api/jobs`).
+  No DB, no state file — same clone-and-go property as the rest. Holds
+  last-run state in a `Map` only (surfaced read-only at `GET /api/jobs`).
+- **Run history is also in-memory only** (`jobs.history.ts`), reset on
+  restart same as everything else here. Retention favours failures: every
+  execution whose rolled-up outcome isn't clean ('warn' = a remediation ran
+  OK, 'err' = something failed) is kept, newest-first, capped at
+  `MAX_KEPT_PER_JOB` (200) per job so a permanently-flapping check can't grow
+  unbounded — a clean ('ok') run only keeps the single most recent one,
+  replacing the previous. `rollupOutcome` (worst-target-wins) mirrors
+  `ui/src/jobs/cron.ts`'s `summarizeTarget`/`summarizeJobRun` — if you change
+  one target-outcome rule, check the other. `GET /api/jobs/:id/history`
+  returns the merged, sorted list; the Jobs UI's History tab renders it.
+  Recorded from `executeJob`'s `finally` (same place `lastRunAt`/
+  `lastDurationMs` are set), so every run is recorded exactly once, including
+  forced ("Test fire") runs (`entry.forced`).
 - **Multi-target fan-out.** `target` accepts a single `<group>/<server>` string
   *or* a YAML list. The engine normalises to `targets[]` and runs the check (+
   `then` + alerts) against each host **in parallel**, with independent results.

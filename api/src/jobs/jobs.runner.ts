@@ -4,6 +4,7 @@ import { loadRunbook, resolveParamValues, type Runbook } from '../runbooks/runbo
 import { collectScript } from '../ssh/ssh.collect.js';
 import { exportPrelude } from '../ssh/prelude.js';
 import { sendAlert } from '../alerts/ntfy.js';
+import { recordRun, rollupOutcome } from './jobs.history.js';
 import type { JobConfig, JobRunState, RunResult, TargetRunState, Trigger } from './jobs.types.js';
 
 // In-memory job state. Lost on restart by design — the scheduler just starts
@@ -261,5 +262,12 @@ export async function executeJob(job: JobConfig, opts: { forceTrigger?: boolean 
     s.running = false;
     s.lastRunAt = new Date(start).toISOString();
     s.lastDurationMs = Date.now() - start;
+    recordRun(job, {
+      runAt: s.lastRunAt,
+      durationMs: s.lastDurationMs,
+      forced: opts.forceTrigger ?? false,
+      outcome: rollupOutcome(job, s.targets),
+      targets: s.targets,
+    });
   }
 }

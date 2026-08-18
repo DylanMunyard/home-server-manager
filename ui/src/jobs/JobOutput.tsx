@@ -17,7 +17,9 @@ function outputText(ts: TargetRunState): string {
   return resultText(r);
 }
 
-function TargetBlock({ job, target, ts }: { job: Job; target: string; ts: TargetRunState | undefined }) {
+// Exported for reuse by JobHistory — a past run's per-target block renders
+// identically to the current last-run one.
+export function TargetBlock({ job, target, ts }: { job: Job; target: string; ts: TargetRunState | undefined }) {
   const [group, server] = target.split('/');
   const o = ts ? summarizeTarget(job, ts) : null;
   // The host is incidental for a single-target check (the output is the point),

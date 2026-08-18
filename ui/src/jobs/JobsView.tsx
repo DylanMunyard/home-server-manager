@@ -4,6 +4,7 @@ import { useJobs } from './useJobs.ts';
 import { useRunbook, useRunbookMap } from '../runbooks/useRunbooks.ts';
 import { JobFlow } from './JobFlow.tsx';
 import { JobOutput } from './JobOutput.tsx';
+import { JobHistory } from './JobHistory.tsx';
 import { JobInvestigations } from './Investigation.tsx';
 import { useAiStatus } from './useAiStatus.ts';
 import { humanizeCron, summarizeJobRun, summarizeTarget, uiState } from './cron.ts';
@@ -42,7 +43,7 @@ export function JobsView() {
   const setSelId = (id: string) => setParams((p) => { const n = new URLSearchParams(p); n.set('job', id); return n; });
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<'output' | 'flow' | 'investigation'>('output');
+  const [tab, setTab] = useState<'output' | 'history' | 'flow' | 'investigation'>('output');
   const [backupBusy, setBackupBusy] = useState<'sqlite' | 'neo4j' | null>(null);
   const job = useMemo(() => jobs.find((j) => j.id === selId) ?? jobs[0] ?? null, [jobs, selId]);
 
@@ -206,6 +207,7 @@ export function JobsView() {
               <div className="panel-h job-tabhead">
                 <div className="tabrow">
                   <button className={`tab ${tab === 'output' ? 'active' : ''}`} onClick={() => setTab('output')}>Last run</button>
+                  <button className={`tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>History</button>
                   <button className={`tab ${tab === 'flow' ? 'active' : ''}`} onClick={() => setTab('flow')}>Flow</button>
                   {showInvestigation && (() => {
                     const hasInv = Object.values(job.state.targets).some((t) => t.investigation);
@@ -218,6 +220,7 @@ export function JobsView() {
                 </div>
               </div>
               {activeTab === 'output' && <JobOutput job={job} />}
+              {activeTab === 'history' && <JobHistory job={job} />}
               {activeTab === 'flow' && <JobFlow job={job} checkRunbook={checkRunbook} thenRunbooks={thenRunbooks} />}
               {activeTab === 'investigation' && <JobInvestigations job={job} aiEnabled={aiEnabled} />}
             </div>

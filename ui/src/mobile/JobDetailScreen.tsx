@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { testAlert, type Job, type Runbook } from '../shared/api.ts';
 import { condText, humanizeCron, summarizeJobRun, summarizeTarget, uiState } from '../jobs/cron.ts';
 import { JobOutput } from '../jobs/JobOutput.tsx';
+import { JobHistory } from '../jobs/JobHistory.tsx';
 import { JobInvestigations } from '../jobs/Investigation.tsx';
 import { useAiStatus } from '../jobs/useAiStatus.ts';
 
@@ -30,7 +31,7 @@ export function JobDetailScreen({ job, checkRunbook, thenRunbooks, running, onRu
   const thens = job.then ?? [];
   const [alertBusy, setAlertBusy] = useState(false);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<'output' | 'flow' | 'investigation'>('output');
+  const [tab, setTab] = useState<'output' | 'history' | 'flow' | 'investigation'>('output');
   const sendTestAlert = async () => {
     setAlertBusy(true);
     setAlertMsg(null);
@@ -103,6 +104,7 @@ export function JobDetailScreen({ job, checkRunbook, thenRunbooks, running, onRu
       <div className="m-content">
         <div className="m-jtabs">
           <button className={`m-jtab ${activeTab === 'output' ? 'on' : ''}`} onClick={() => setTab('output')}>Last run</button>
+          <button className={`m-jtab ${activeTab === 'history' ? 'on' : ''}`} onClick={() => setTab('history')}>History</button>
           <button className={`m-jtab ${activeTab === 'flow' ? 'on' : ''}`} onClick={() => setTab('flow')}>Flow</button>
           {showInvestigation && (
             <button className={`m-jtab ${activeTab === 'investigation' ? 'on' : ''}`} onClick={() => setTab('investigation')}>
@@ -111,6 +113,7 @@ export function JobDetailScreen({ job, checkRunbook, thenRunbooks, running, onRu
           )}
         </div>
         {activeTab === 'output' && <JobOutput job={job} />}
+        {activeTab === 'history' && <JobHistory job={job} />}
         {activeTab === 'investigation' && <JobInvestigations job={job} aiEnabled={aiEnabled} />}
         {activeTab === 'flow' && (
         <div className="m-jflow">

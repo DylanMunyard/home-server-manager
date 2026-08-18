@@ -349,6 +349,29 @@ button[data-variant="backup"]:hover { background: var(--ink); color: var(--bg); 
 .job-output-tag.warn { color: var(--warn, #a06414); }
 .job-output-tag.err  { color: var(--err); }
 
+.job-history { padding: 16px 22px 10px; }
+.job-history-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.job-history-refresh { font-size: 11px; background: none; border: 1px solid var(--line); padding: 4px 10px; cursor: pointer; color: var(--ink-2); }
+.job-history-refresh:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-3); }
+.job-history-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.job-history-row { border-bottom: 1px solid var(--line); }
+.job-history-head {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 10px 4px; background: none; border: none; cursor: pointer;
+  font: inherit; text-align: left; color: var(--ink);
+}
+.job-history-head:hover { background: var(--bg-2); }
+.job-history-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.job-history-dot.ok   { background: var(--ok); }
+.job-history-dot.warn { background: var(--warn, #a06414); }
+.job-history-dot.err  { background: var(--err); }
+.job-history-when { font-size: 13px; }
+.job-history-dur { font-size: 11px; color: var(--ink-3); }
+.job-history-forced { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); border: 1px solid var(--line); padding: 2px 6px; }
+.job-history-head .job-output-tag { margin-left: auto; }
+.job-history-body { padding: 4px 4px 16px; }
+.job-history-row.open .job-history-head { border-bottom: 1px dashed var(--line); }
+
 /* ─────────────────────────────────────────────────────────────
  *  MOBILE — single-column shell with bottom tab nav
  *  Tokens scoped to .m-app so desktop look is unaffected.
@@ -684,6 +707,25 @@ button[data-variant="backup"]:hover { background: var(--ink); color: var(--bg); 
 .m-app .job-output-tag.ok   { color: var(--m-ok); }
 .m-app .job-output-tag.warn { color: var(--m-warn, #9a6a1a); }
 .m-app .job-output-tag.err  { color: var(--m-err); }
+
+.m-app .job-history { padding: 0; }
+.m-app .job-history-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.m-app .job-history-refresh { font-size: 10.5px; background: none; border: 1px solid var(--m-line); padding: 5px 10px; color: var(--m-ink-3); }
+.m-app .job-history-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--m-line); }
+.m-app .job-history-row { border-bottom: 1px solid var(--m-line); }
+.m-app .job-history-head {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 11px 0; background: none; border: none; font: inherit; text-align: left; color: var(--m-ink);
+}
+.m-app .job-history-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.m-app .job-history-dot.ok   { background: var(--m-ok); }
+.m-app .job-history-dot.warn { background: var(--m-warn, #9a6a1a); }
+.m-app .job-history-dot.err  { background: var(--m-err); }
+.m-app .job-history-when { font-size: 12.5px; }
+.m-app .job-history-dur { font-size: 10.5px; color: var(--m-ink-4); }
+.m-app .job-history-forced { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--m-ink-4); border: 1px solid var(--m-line); padding: 2px 6px; }
+.m-app .job-history-head .job-output-tag { margin-left: auto; }
+.m-app .job-history-body { padding: 2px 0 14px; }
 .m-jmeta { font-size: 10.5px; color: var(--m-ink-3); margin-top: 8px; word-break: break-all; }
 .m-jmeta b { color: var(--m-ink-2); }
 .m-jcond { display: inline-block; margin-top: 7px; background: var(--m-hl); border: 1.5px solid var(--m-ink); padding: 6px 11px; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
