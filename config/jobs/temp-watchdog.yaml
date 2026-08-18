@@ -1,5 +1,5 @@
 name: Temp watchdog
-description: Alert when any bare-metal host runs hot for 5+ minutes
+description: Monitor bare-metal host temps (alerts currently OFF — see notify note)
 schedule: "*/2 * * * *"          # MUST be shorter than TEMP_SUSTAIN (300s)
 
 # `target` takes a list — one job fans out across every host each tick, with an
@@ -18,9 +18,10 @@ params:
   TEMP_THRESHOLD: "80"           # job-wide; one line for all hosts. Split into
                                  # separate jobs if a host needs its own number.
 
-notify:
-  on: [error]
-  priority: high
+# notify block removed 2026-08-19 — temp alerts were firing too often across
+# the fleet. The check still runs and is visible in the Jobs UI (state.targets
+# / Last-run tab), it just doesn't push. Re-add a `notify:` block to turn
+# alerting back on.
 
 # Intent hint for an on-demand AI investigation. Investigations do NOT fire
 # automatically — when a host runs hot you trigger one from the Jobs UI

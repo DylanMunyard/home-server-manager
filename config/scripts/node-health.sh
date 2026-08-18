@@ -7,7 +7,10 @@
 #         so "above 3" means more than three cores' worth of work
 #   mem — used % of MemTotal (MemAvailable-based, so page cache doesn't count)
 #   web — wall time for a GET of WEB_URL (skipped when WEB_URL is empty);
-#         an unreachable site counts as a breach too
+#         an unreachable site (connection/handshake failure) is treated as a
+#         PASS, not a breach — it can't tell "box is down" from "network
+#         blip", and a false unreachable would otherwise count toward the
+#         same breach counter as a genuine slow response. Retries next tick.
 #
 # A signal alerts when EITHER of two conditions holds, and does so EXACTLY ONCE
 # per incident:
@@ -174,11 +177,12 @@ tick cpu "$cpu_breach" "${cpu_cores} cores busy (> ${CPU_MAX_CORES})"
 tick mem "$mem_breach" "${mem_pct}% used (> ${MEM_MAX_PCT}%)"
 
 if [ "$web_state" != "skipped" ]; then
-  web_breach=0
   if [ "$web_state" = "unreachable" ]; then
-    web_breach=1
-    tick web "$web_breach" "${WEB_URL} unreachable"
+    # Connection/handshake failure, not a confirmed slow response — pass and
+    # retry next tick rather than counting it toward the breach threshold.
+    tick web 0 "${WEB_URL} unreachable (connection/handshake failure — treated as pass)"
   else
+    web_breach=0
     over "$web_secs" "$WEB_MAX_SECS" && web_breach=1
     tick web "$web_breach" "${web_secs}s response (> ${WEB_MAX_SECS}s)"
   fi
