@@ -194,7 +194,16 @@ export function DesktopApp() {
   return (
     <div className="app">
       <header className="masthead">
-        <h1>home-lab</h1>
+        <div className="brand-group">
+          <div className="brand-logo">
+            <span className="brand-pulse" />
+            <h1>home-lab</h1>
+          </div>
+          <span className="telemetry-badge">
+            <span className="telemetry-dot" />
+            <span>ONLINE · {allServers.length} NODES</span>
+          </span>
+        </div>
         <nav className="top-nav">
           <button data-active={topView === 'console'} onClick={() => setTopView('console')}>console</button>
           <button data-active={topView === 'dashboard'} onClick={() => setTopView('dashboard')}>dashboard</button>
@@ -203,8 +212,10 @@ export function DesktopApp() {
           )}
           <button data-active={topView === 'jobs'} onClick={() => setTopView('jobs')}>jobs</button>
         </nav>
-        <span className="meta">{allServers.length} nodes · {groups.length} groups · {runbooks.length} runbooks</span>
-        <a className="signout" href="/api/auth/logout">sign out</a>
+        <div className="masthead-right">
+          <span className="meta">{allServers.length} nodes · {groups.length} groups · {runbooks.length} runbooks</span>
+          <a className="signout" href="/api/auth/logout">sign out</a>
+        </div>
       </header>
 
       {topView === 'jobs' ? <JobsView /> : topView === 'dashboard' ? <Dashboard />
@@ -246,7 +257,18 @@ export function DesktopApp() {
               <div className="stage-head">
                 <h2>{runbook?.name ?? 'Select a runbook'}</h2>
                 <div className="target">
-                  target: <b>{selectedServer ? `${selectedServer.user}@${selectedServer.host}` : '—'}</b>
+                  <span className="target-label">target:</span>
+                  <b>{selectedServer ? `${selectedServer.user}@${selectedServer.host}` : '—'}</b>
+                  {selectedServer && (
+                    <button
+                      type="button"
+                      className="target-copy-btn"
+                      onClick={() => navigator.clipboard.writeText(`${selectedServer.user}@${selectedServer.host}`)}
+                      title="Copy SSH target"
+                    >
+                      copy
+                    </button>
+                  )}
                 </div>
                 {runbook?.description && <div className="desc">{runbook.description}</div>}
               </div>
@@ -260,10 +282,15 @@ export function DesktopApp() {
               <div className="stage-actions">
                 <button
                   data-variant="run"
+                  data-running={isRunLive}
                   disabled={!canRun}
                   onClick={startRun}
                 >
-                  Run
+                  {isRunLive ? (
+                    <span className="run-inner"><span className="run-spinner" /> RUNNING</span>
+                  ) : (
+                    'RUN'
+                  )}
                 </button>
                 {isRunLive && <button onClick={cancelRun}>Cancel</button>}
                 <button
@@ -279,7 +306,7 @@ export function DesktopApp() {
               </div>
 
               {runbook
-                ? <ScriptViewer contents={runbook.contents} />
+                ? <ScriptViewer contents={runbook.contents} title={runbook.name} />
                 : <div className="empty">Choose a runbook on the right to preview its script.</div>}
             </>
           ) : (

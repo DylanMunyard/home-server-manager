@@ -209,8 +209,11 @@ async function runOnTarget(job: JobConfig, target: string, forceTrigger: boolean
     if (workFailure) {
       ts.lastError = workFailure.reason;
 
-      // `error` event — push the immediate failure alert.
-      if (events.has('error')) {
+      // `error` event — push the immediate failure alert only when the job
+      // itself executed and failed, not if it couldn't connect to the server
+      // or encountered an SSH-level / prerequisite failure.
+      const isConnectionFailure = !workFailure.result.connected || !!workFailure.result.error;
+      if (events.has('error') && !isConnectionFailure) {
         await sendAlert({
           title: workFailure.title,
           body: alertBody(target, workFailure.runbookId, workFailure.result),

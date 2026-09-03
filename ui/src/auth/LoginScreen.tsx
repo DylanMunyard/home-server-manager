@@ -5,9 +5,14 @@ export function LoginScreen() {
   return (
     <div className="login">
       <div className="login-card">
-        <h1>home-lab</h1>
-        <p className="login-meta">sign in to continue</p>
-        <a className="login-btn" href="/api/auth/login">Sign in with Discord</a>
+        <div className="login-brand">
+          <span className="brand-pulse" />
+          <h1>home-lab</h1>
+        </div>
+        <p className="login-meta">infrastructure operations · authenticated access</p>
+        <a className="login-btn" href="/api/auth/login">
+          Sign in with Discord
+        </a>
       </div>
     </div>
   );

@@ -53,7 +53,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ onInput, on
       term = new XTerm({
         fontFamily: 'JetBrains Mono, ui-monospace, Menlo, monospace',
         fontSize: 13,
-        theme: { background: '#111111', foreground: '#e6e1d3', cursor: '#f4d36a' },
+        theme: {
+          background: '#05080e',
+          foreground: '#e2e8f0',
+          cursor: '#10b981',
+          selectionBackground: 'rgba(16, 185, 129, 0.35)',
+        },
         convertEol: true,
         cursorBlink: true,
       });
@@ -69,6 +74,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ onInput, on
         for (const chunk of pendingRef.current) term.write(chunk);
         pendingRef.current = [];
       }
+
       // Now that the terminal is alive, hook up a refit-on-resize observer.
       ro = new ResizeObserver(() => { try { fit?.fit(); } catch { /* ignore */ } });
       ro.observe(host);

@@ -28,7 +28,7 @@
 # params:
 #   MOUNT_PATH: { label: "Host path new PVCs should provision onto", default: "/mnt/bfstats-data" }
 #   REVERT:     { label: "Set to 1 to restore k3s's default and remove the .skip", default: "0" }
-#   RESTART_K3S:{ label: "Set to 1 to bounce k3s afterwards to prove the change survives", default: "0" }
+#   RESTART_K3S: { label: "Set to 1 to bounce k3s afterwards to prove the change survives", default: "0" }
 # nodes: [ hetzner/bfstats ]
 # confirm: This edits the cluster's local-path provisioner configuration so NEW PVCs provision onto the attached volume. Existing PVs and their data are untouched. Continue?
 #

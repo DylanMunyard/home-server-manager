@@ -114,22 +114,27 @@ async function fetchKubeconfig(conn: Client): Promise<string> {
   });
 }
 
-/** Decode HTTP chunked transfer encoding. */
-function decodeChunked(body: string): string {
-  const chunks: string[] = [];
+const CRLF = Buffer.from('\r\n');
+const DOUBLE_CRLF = Buffer.from('\r\n\r\n');
+
+/** Decode HTTP chunked transfer encoding on raw byte buffers. */
+function decodeChunked(buf: Buffer): string {
+  const chunks: Buffer[] = [];
   let pos = 0;
-  while (pos < body.length) {
-    const lineEnd = body.indexOf('\r\n', pos);
+  while (pos < buf.length) {
+    const lineEnd = buf.indexOf(CRLF, pos);
     if (lineEnd === -1) break;
-    const sizeHex = body.slice(pos, lineEnd);
+    const sizeLine = buf.subarray(pos, lineEnd).toString('latin1').trim();
+    const sizeHex = sizeLine.split(';')[0].trim();
     const size = parseInt(sizeHex, 16);
-    if (size === 0) break;
+    if (isNaN(size) || size === 0) break;
     const chunkStart = lineEnd + 2;
     const chunkEnd = chunkStart + size;
-    chunks.push(body.slice(chunkStart, chunkEnd));
+    if (chunkEnd > buf.length) break;
+    chunks.push(buf.subarray(chunkStart, chunkEnd));
     pos = chunkEnd + 2; // skip trailing \r\n
   }
-  return chunks.join('');
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /** Make an HTTPS request through an SSH tunnel with mTLS. */
@@ -177,26 +182,30 @@ function tunnelRequest(
           tlsSocket.write(req);
         });
 
-        let data = '';
-        tlsSocket.on('data', (chunk) => { data += chunk.toString('utf8'); });
+        const chunks: Buffer[] = [];
+        tlsSocket.on('data', (chunk: Buffer) => { chunks.push(chunk); });
         tlsSocket.on('end', () => {
+          const raw = Buffer.concat(chunks);
           // Parse HTTP response - handle chunked encoding
-          const headerEnd = data.indexOf('\r\n\r\n');
+          const headerEnd = raw.indexOf(DOUBLE_CRLF);
           if (headerEnd === -1) {
-            console.error('[k8s] No HTTP headers in response, raw:', data.slice(0, 200));
+            console.error('[k8s] No HTTP headers in response, raw:', raw.subarray(0, 200).toString('latin1'));
             return reject(new Error('invalid HTTP response: no headers'));
           }
 
-          const head = data.slice(0, headerEnd);
-          let body = data.slice(headerEnd + 4);
+          const head = raw.subarray(0, headerEnd).toString('latin1');
+          const bodyBuf = raw.subarray(headerEnd + 4);
 
           const statusLine = head.split('\r\n')[0];
           const statusMatch = /HTTP\/\d\.\d (\d+)/.exec(statusLine);
           const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
 
-          // Handle chunked transfer encoding
-          if (head.toLowerCase().includes('transfer-encoding: chunked')) {
-            body = decodeChunked(body);
+          // Handle chunked transfer encoding or raw UTF-8 body
+          let body = '';
+          if (/transfer-encoding:\s*chunked/i.test(head)) {
+            body = decodeChunked(bodyBuf);
+          } else {
+            body = bodyBuf.toString('utf8');
           }
 
           if (status === 0) {

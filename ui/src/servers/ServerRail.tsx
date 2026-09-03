@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import type { GroupSummary } from '../shared/api.ts';
 
 type Props = {
@@ -7,19 +8,50 @@ type Props = {
 };
 
 export function ServerRail({ groups, selectedId, onSelect }: Props) {
+  const [search, setSearch] = useState('');
   const totalServers = groups.reduce((n, g) => n + g.servers.length, 0);
+
+  const filteredGroups = useMemo(() => {
+    if (!search.trim()) return groups;
+    const q = search.toLowerCase();
+    return groups
+      .map((g) => ({
+        ...g,
+        servers: g.servers.filter(
+          (s) =>
+            s.id.toLowerCase().includes(q) ||
+            s.name.toLowerCase().includes(q) ||
+            s.host.toLowerCase().includes(q) ||
+            s.user.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.servers.length > 0);
+  }, [groups, search]);
+
+  const matchedCount = filteredGroups.reduce((n, g) => n + g.servers.length, 0);
 
   return (
     <aside className="rail-left">
       <div className="panel-h">
         <span>Servers</span>
-        <span className="count">{totalServers}</span>
+        <span className="count">{search.trim() ? `${matchedCount}/${totalServers}` : totalServers}</span>
+      </div>
+      <div className="panel-search">
+        <input
+          type="text"
+          placeholder="Filter nodes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+        />
       </div>
       <div className="panel-body">
         {groups.length === 0 ? (
           <div className="empty">Drop a YAML file in <code>config/servers/</code> to add a group.</div>
+        ) : filteredGroups.length === 0 ? (
+          <div className="empty">No nodes match "{search}"</div>
         ) : (
-          groups.map((g) => (
+          filteredGroups.map((g) => (
             <section key={g.id} className="group">
               <header className="group-h">
                 <span className="group-name">{g.name}</span>

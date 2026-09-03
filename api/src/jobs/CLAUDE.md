@@ -78,10 +78,12 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   (informational) — ONE combined push per target: the check's output (the
   trigger reason) plus a section per `then` runbook, each clipped so the body
   stays under ntfy's ~4 KB inline limit (full output in the jobs UI). `error`
-  fires when the *effective work runbook* fails — any `then` entry if the chain
-  ran (the push carries the first failure's output), else `run` when the job
-  has no `when` (a check's nonzero exit is a signal, not a failure), or any
-  SSH-level error. ntfy is env-driven (`NTFY_URL`/`NTFY_TOPIC`/`NTFY_TOKEN`);
+  fires when the *effective work runbook* itself fails (exits nonzero) — any `then`
+  entry if the chain ran (the push carries the first failure's output), else `run`
+  when the job has no `when` (a check's nonzero exit is a signal, not a failure).
+  SSH-level connection errors and prerequisite failures do NOT fire notifications
+  (avoiding spam when hosts are unreachable), but are still recorded in `lastError`
+  and surfaced in the jobs UI. ntfy is env-driven (`NTFY_URL`/`NTFY_TOPIC`/`NTFY_TOKEN`);
   unset topic ⇒ alerting disabled (no-op, not a startup failure).
 - **Jobs are auxiliary — they must never take down the API.** `loadJobs`
   (`jobs.loader.ts`) validates each file independently (cron parses;
