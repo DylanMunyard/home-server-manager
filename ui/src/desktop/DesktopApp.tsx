@@ -1,8 +1,7 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ServerRail } from '../servers/ServerRail.tsx';
+import { UnifiedExplorer } from './UnifiedExplorer.tsx';
 import { ServerDetail } from '../servers/ServerDetail.tsx';
-import { RunbookList } from '../runbooks/RunbookList.tsx';
 import { RunbookParams } from '../runbooks/RunbookParams.tsx';
 import { ScriptViewer } from '../runbooks/ScriptViewer.tsx';
 import { Terminal, type TerminalHandle } from '../terminal/Terminal.tsx';
@@ -22,6 +21,7 @@ import { useMediaStatus } from '../media/useMediaStatus.ts';
 
 type Mode = 'runbook' | 'shell' | 'chat';
 type TopView = 'console' | 'jobs' | 'dashboard' | 'media';
+type LayoutMode = 'split' | 'stacked' | 'focus';
 
 const RUN_STATUS_LABEL: Record<string, string> = {
   idle:       'ready',
@@ -50,16 +50,13 @@ export function DesktopApp() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Top view = pathname. `/` and `/console` show the console; `/jobs` the jobs
-  // view; `/dashboard` the live metrics. Anything else falls back to console so
-  // a bookmarked /m/... URL (mobile) doesn't render blank when the desktop
-  // layout takes over.
+  // Top view = pathname
   const topView: TopView = location.pathname.startsWith('/jobs') ? 'jobs'
     : location.pathname.startsWith('/dashboard') ? 'dashboard'
     : location.pathname.startsWith('/media') ? 'media'
     : 'console';
 
-  // Selections live in the query string so refresh + share + back-button work.
+  // Selections in query string
   const serverId = searchParams.get('server');
   const runbookId = searchParams.get('runbook');
   const rawMode = searchParams.get('mode') as Mode | null;
@@ -82,6 +79,26 @@ export function DesktopApp() {
       return next;
     }, { replace: false });
   }, [setSearchParams]);
+
+  // UI state for the new layout
+  const [explorerOpen, setExplorerOpen] = useState(true);
+  const [explorerTab, setExplorerTab] = useState<'nodes' | 'runbooks'>('nodes');
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('split');
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState(false);
+  const [showSpecs, setShowSpecs] = useState(false);
+
+  // Keyboard shortcut: Ctrl+B or Cmd+B toggles explorer
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setExplorerOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [alertBusy, setAlertBusy] = useState(false);
@@ -117,14 +134,15 @@ export function DesktopApp() {
     [allServers, serverId],
   );
 
+  const selectedGroup = useMemo(() => {
+    if (!selectedServer) return null;
+    return groups.find((g) => g.id === selectedServer.groupId) ?? null;
+  }, [groups, selectedServer]);
+
   const filteredRunbooks = useMemo(() => {
     return runbooks.filter((rb) => {
-      // Global runbooks (no nodes specified) are always shown.
       if (!rb.nodes || rb.nodes.length === 0) return true;
-      
-      // Node-specific runbooks are hidden unless a server is selected.
       if (!serverId) return false;
-
       return rb.nodes.some((pattern) => {
         if (pattern === serverId) return true;
         if (pattern.includes('*')) {
@@ -143,7 +161,6 @@ export function DesktopApp() {
     updateParams({ mode: next === 'runbook' ? null : next });
   }, [mode, cancelRun, disconnectShell, updateParams]);
 
-  // Seed message from ?seed= param (set by the jobs view "Chat" button).
   const seedMessage = searchParams.get('seed') ?? undefined;
 
   const canRun = mode === 'runbook' && !!serverId && !!runbookId && paramsComplete
@@ -176,8 +193,6 @@ export function DesktopApp() {
     if (serverId && runbookId) run(serverId, runbookId, paramValues);
   }, [serverId, runbookId, paramValues, run]);
 
-  // Manual-run guard: a runbook flagged `confirm:` opens the dialog first;
-  // everything else runs immediately.
   const startRun = useCallback(() => {
     if (runbook?.confirm) setConfirmRun(true);
     else doRun();
@@ -191,156 +206,524 @@ export function DesktopApp() {
     setAlertMsg(r.sent ? 'test alert sent ✓' : `alert failed: ${r.reason ?? 'unknown'}`);
   }, [runbookId, serverId]);
 
+  const copySshTarget = useCallback(() => {
+    if (!selectedServer) return;
+    const target = `${selectedServer.user}@${selectedServer.host}${selectedServer.port !== 22 ? ` -p ${selectedServer.port}` : ''}`;
+    navigator.clipboard.writeText(target);
+    setCopiedTarget(true);
+    setTimeout(() => setCopiedTarget(false), 2000);
+  }, [selectedServer]);
+
+  // Overall status badge for flight deck
+  const currentStatusBadge = useMemo(() => {
+    if (mode === 'runbook') {
+      return {
+        label: runStatusLabel,
+        state: runState,
+        isLive: isRunLive,
+      };
+    }
+    if (mode === 'shell') {
+      return {
+        label: shellStatusLabel,
+        state: shellState,
+        isLive: isShellLive,
+      };
+    }
+    return {
+      label: 'ai agent active',
+      state: 'idle',
+      isLive: false,
+    };
+  }, [mode, runStatusLabel, runState, isRunLive, shellStatusLabel, shellState, isShellLive]);
+
   return (
-    <div className="app">
-      <header className="masthead">
-        <div className="brand-group">
-          <div className="brand-logo">
-            <span className="brand-pulse" />
-            <h1>home-lab</h1>
+    <div className="cyber-app">
+      {/* ── Left Activity Dock (Slim Navigation Rail) ── */}
+      <aside className="activity-dock">
+        <div className="dock-top">
+          <div className="dock-brand" title="home-server-mgr">
+            <span className="dock-brand-pulse" />
+            <span className="dock-brand-glyph">⬡</span>
           </div>
-          <span className="telemetry-badge">
-            <span className="telemetry-dot" />
-            <span>ONLINE · {allServers.length} NODES</span>
-          </span>
-        </div>
-        <nav className="top-nav">
-          <button data-active={topView === 'console'} onClick={() => setTopView('console')}>console</button>
-          <button data-active={topView === 'dashboard'} onClick={() => setTopView('dashboard')}>dashboard</button>
-          {mediaEnabled && (
-            <button data-active={topView === 'media'} onClick={() => setTopView('media')}>media</button>
-          )}
-          <button data-active={topView === 'jobs'} onClick={() => setTopView('jobs')}>jobs</button>
-        </nav>
-        <div className="masthead-right">
-          <span className="meta">{allServers.length} nodes · {groups.length} groups · {runbooks.length} runbooks</span>
-          <a className="signout" href="/api/auth/logout">sign out</a>
-        </div>
-      </header>
 
-      {topView === 'jobs' ? <JobsView /> : topView === 'dashboard' ? <Dashboard />
-        : topView === 'media' ? (
-          <MediaView
-            // Drill-down lives in the URL query (?movie=/?series=) so refresh +
-            // back-button keep the open title — same pattern as server/runbook.
-            openMovieId={searchParams.get('movie') ? Number(searchParams.get('movie')) : null}
-            openSeriesId={searchParams.get('series') ? Number(searchParams.get('series')) : null}
-            onOpenMovie={(id) => updateParams({ movie: String(id), series: null })}
-            onOpenSeries={(id) => updateParams({ series: String(id), movie: null })}
-            onCloseDetail={() => updateParams({ movie: null, series: null })}
-          />
-        ) : (
-      <div className={`workspace${mode === 'chat' ? ' no-rail' : ''}`}>
-        <ServerRail groups={groups} selectedId={serverId} onSelect={selectServer} />
+          <nav className="dock-nav">
+            <button
+              type="button"
+              className={`dock-btn ${topView === 'console' ? 'active' : ''}`}
+              onClick={() => setTopView('console')}
+              title="Target Operations & Console"
+            >
+              <span className="dock-icon">&gt;_</span>
+              <span className="dock-label">CONSOLE</span>
+            </button>
 
-        <main className="stage">
-          <nav className="mode-tabs">
-            <button data-active={mode === 'runbook'} onClick={() => switchMode('runbook')}>Runbook</button>
-            <button data-active={mode === 'shell'}   onClick={() => switchMode('shell')}>Shell</button>
-            {aiEnabled && (
-              <button data-active={mode === 'chat'} onClick={() => switchMode('chat')}>AI Chat</button>
+            <button
+              type="button"
+              className={`dock-btn ${topView === 'dashboard' ? 'active' : ''}`}
+              onClick={() => setTopView('dashboard')}
+              title="Live Cluster Telemetry"
+            >
+              <span className="dock-icon">∿</span>
+              <span className="dock-label">METRICS</span>
+            </button>
+
+            <button
+              type="button"
+              className={`dock-btn ${topView === 'jobs' ? 'active' : ''}`}
+              onClick={() => setTopView('jobs')}
+              title="Recurring Jobs & Watchdogs"
+            >
+              <span className="dock-icon">⟳</span>
+              <span className="dock-label">JOBS</span>
+            </button>
+
+            {mediaEnabled && (
+              <button
+                type="button"
+                className={`dock-btn ${topView === 'media' ? 'active' : ''}`}
+                onClick={() => setTopView('media')}
+                title="Media Disk Triage"
+              >
+                <span className="dock-icon">▷</span>
+                <span className="dock-label">MEDIA</span>
+              </button>
             )}
           </nav>
+        </div>
 
-          {mode === 'chat' ? (
-            serverId ? (
-              <ChatSession
-                key={serverId}
-                target={serverId}
-                seedMessage={seedMessage}
-              />
-            ) : (
-              <div className="empty">Select a server to start an AI chat session.</div>
-            )
-          ) : mode === 'runbook' ? (
-            <>
-              <div className="stage-head">
-                <h2>{runbook?.name ?? 'Select a runbook'}</h2>
-                <div className="target">
-                  <span className="target-label">target:</span>
-                  <b>{selectedServer ? `${selectedServer.user}@${selectedServer.host}` : '—'}</b>
-                  {selectedServer && (
+        <div className="dock-bottom">
+          <div className="dock-telemetry" title={`${allServers.length} nodes connected`}>
+            <span className="telemetry-core-dot" />
+            <span className="telemetry-core-text">{allServers.length}N</span>
+          </div>
+
+          {topView === 'console' && (
+            <button
+              type="button"
+              className="dock-toggle-btn"
+              onClick={() => setExplorerOpen((prev) => !prev)}
+              title={explorerOpen ? 'Hide Explorer (Ctrl+B)' : 'Show Explorer (Ctrl+B)'}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {explorerOpen ? (
+                  <path d="M18 6L6 12L18 18" />
+                ) : (
+                  <path d="M6 6L18 12L6 18" />
+                )}
+              </svg>
+            </button>
+          )}
+
+          <a className="dock-signout" href="/api/auth/logout" title="Sign out of command session">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </a>
+        </div>
+      </aside>
+
+      {/* ── Main Viewport ── */}
+      <div className="deck-viewport">
+        {topView === 'jobs' ? (
+          <div className="fullscreen-view">
+            <header className="view-subhead">
+              <div className="subhead-left">
+                <span className="subhead-badge">AUTOMATION ENGINE</span>
+                <h1 className="subhead-title">Recurring Jobs &amp; Watchdogs</h1>
+              </div>
+              <div className="subhead-meta">
+                <span>In-memory scheduler</span>
+                <span className="meta-sep">/</span>
+                <span>ntfy alert integrations</span>
+              </div>
+            </header>
+            <JobsView />
+          </div>
+        ) : topView === 'dashboard' ? (
+          <div className="fullscreen-view">
+            <header className="view-subhead">
+              <div className="subhead-left">
+                <span className="subhead-badge">LIVE TELEMETRY</span>
+                <h1 className="subhead-title">Node Performance &amp; Metrics</h1>
+              </div>
+              <div className="subhead-meta">
+                <span>{allServers.length} monitored nodes</span>
+                <span className="meta-sep">/</span>
+                <span>Zero-install streaming probe</span>
+              </div>
+            </header>
+            <Dashboard />
+          </div>
+        ) : topView === 'media' ? (
+          <div className="fullscreen-view">
+            <header className="view-subhead">
+              <div className="subhead-left">
+                <span className="subhead-badge">STORAGE TRIAGE</span>
+                <h1 className="subhead-title">Media Disk Cleanup</h1>
+              </div>
+              <div className="subhead-meta">
+                <span>Radarr · Sonarr · Plex</span>
+              </div>
+            </header>
+            <MediaView
+              openMovieId={searchParams.get('movie') ? Number(searchParams.get('movie')) : null}
+              openSeriesId={searchParams.get('series') ? Number(searchParams.get('series')) : null}
+              onOpenMovie={(id) => updateParams({ movie: String(id), series: null })}
+              onOpenSeries={(id) => updateParams({ series: String(id), movie: null })}
+              onCloseDetail={() => updateParams({ movie: null, series: null })}
+            />
+          </div>
+        ) : (
+          /* ── CONSOLE WORKSPACE (Dual-Deck / Multi-Pane) ── */
+          <div className={`console-workspace ${explorerOpen ? 'with-explorer' : 'no-explorer'}`}>
+            {/* Unified Explorer Panel */}
+            <UnifiedExplorer
+              groups={groups}
+              allServers={allServers}
+              selectedServerId={serverId}
+              onSelectServer={selectServer}
+              runbooks={filteredRunbooks}
+              selectedRunbookId={runbookId}
+              onSelectRunbook={(id) => updateParams({ runbook: id })}
+              activeTab={explorerTab}
+              onTabChange={setExplorerTab}
+              isOpen={explorerOpen}
+              onToggleOpen={() => setExplorerOpen((prev) => !prev)}
+            />
+
+            {/* Stage Workstation */}
+            <main className="deck-stage">
+              {/* Flight Deck Header & Quick Control HUD */}
+              <header className="flight-deck">
+                <div className="flight-left">
+                  {/* Server Breadcrumbs & Quick Dropdown Switcher */}
+                  <div className="server-crumb-wrap">
                     <button
                       type="button"
-                      className="target-copy-btn"
-                      onClick={() => navigator.clipboard.writeText(`${selectedServer.user}@${selectedServer.host}`)}
-                      title="Copy SSH target"
+                      className="crumb-btn"
+                      onClick={() => setQuickSwitcherOpen((prev) => !prev)}
+                      title="Click to quickly switch target node"
                     >
-                      copy
+                      <span className="crumb-group">{selectedGroup?.name ?? 'group'}</span>
+                      <span className="crumb-sep">›</span>
+                      <span className="crumb-node">{selectedServer?.name ?? 'select-node'}</span>
+                      <span className="crumb-arrow">▼</span>
+                    </button>
+
+                    {quickSwitcherOpen && (
+                      <div className="quick-switcher-menu">
+                        <div className="switcher-head">Switch Target Node</div>
+                        <ul className="switcher-list">
+                          {allServers.map((s) => (
+                            <li
+                              key={s.id}
+                              className={`switcher-item ${s.id === serverId ? 'active' : ''}`}
+                              onClick={() => {
+                                selectServer(s.id);
+                                setQuickSwitcherOpen(false);
+                              }}
+                            >
+                              <span className="switcher-dot" />
+                              <span className="switcher-name">{s.name}</span>
+                              <span className="switcher-host">{s.user}@{s.host}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SSH Target Chip with Copy Button */}
+                  {selectedServer && (
+                    <div className="target-chip">
+                      <span className="target-chip-val">
+                        {selectedServer.user}@{selectedServer.host}{selectedServer.port !== 22 ? `:${selectedServer.port}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        className="target-chip-copy"
+                        onClick={copySshTarget}
+                        title="Copy SSH target command"
+                      >
+                        {copiedTarget ? '✓' : 'copy'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Active Runbook Chip */}
+                  {runbook && (
+                    <div className="runbook-chip" title={runbook.description || runbook.name}>
+                      <span className="chip-glyph">$</span>
+                      <span className="chip-name">{runbook.name}</span>
+                      <span className="chip-file">{runbook.filename}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flight-right">
+                  {/* Live Status Radar */}
+                  <div className="radar-status-badge" data-state={currentStatusBadge.state}>
+                    <span className={`radar-dot ${currentStatusBadge.isLive ? 'pulse' : ''}`} />
+                    <span className="radar-text">{currentStatusBadge.label}</span>
+                  </div>
+
+                  {/* Layout Mode Switcher */}
+                  <div className="layout-modes">
+                    <button
+                      type="button"
+                      className={`layout-btn ${layoutMode === 'split' ? 'active' : ''}`}
+                      onClick={() => setLayoutMode('split')}
+                      title="Dual-Deck Split (Side-by-side execution & live terminal)"
+                    >
+                      <span>◫</span>
+                      <span className="layout-tip">SPLIT</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`layout-btn ${layoutMode === 'stacked' ? 'active' : ''}`}
+                      onClick={() => setLayoutMode('stacked')}
+                      title="Stacked Layout (Studio on top, Terminal below)"
+                    >
+                      <span>⬒</span>
+                      <span className="layout-tip">STACK</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`layout-btn ${layoutMode === 'focus' ? 'active' : ''}`}
+                      onClick={() => setLayoutMode('focus')}
+                      title="Focus Mode (Full-width Live Terminal)"
+                    >
+                      <span>⛶</span>
+                      <span className="layout-tip">FOCUS</span>
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              {/* Mode ribbon bar */}
+              <div className="deck-mode-bar">
+                <nav className="mode-ribbon">
+                  <button
+                    type="button"
+                    className={`mode-btn ${mode === 'runbook' ? 'active' : ''}`}
+                    onClick={() => switchMode('runbook')}
+                  >
+                    Runbook Studio
+                  </button>
+                  <button
+                    type="button"
+                    className={`mode-btn ${mode === 'shell' ? 'active' : ''}`}
+                    onClick={() => switchMode('shell')}
+                  >
+                    Interactive Shell
+                  </button>
+                  {aiEnabled && (
+                    <button
+                      type="button"
+                      className={`mode-btn ${mode === 'chat' ? 'active' : ''}`}
+                      onClick={() => switchMode('chat')}
+                    >
+                      AI Copilot
                     </button>
                   )}
-                </div>
-                {runbook?.description && <div className="desc">{runbook.description}</div>}
+                </nav>
+
+                {serverId && (
+                  <button
+                    type="button"
+                    className="specs-toggle-btn"
+                    onClick={() => setShowSpecs((prev) => !prev)}
+                  >
+                    {showSpecs ? 'Hide Node Specs ▲' : 'Node Specs ▼'}
+                  </button>
+                )}
               </div>
 
-              {serverId && (
-                <ServerDetail detail={serverDetail} loading={detailLoading} error={detailError} />
+              {/* Collapsible server specs details */}
+              {serverId && showSpecs && (
+                <div className="specs-drawer">
+                  <ServerDetail detail={serverDetail} loading={detailLoading} error={detailError} />
+                </div>
               )}
 
-              <RunbookParams params={params} values={paramValues} onChange={setParamValue} />
+              {/* Workstation Deck Body */}
+              <div className={`dual-deck ${layoutMode === 'split' ? 'layout-split' : layoutMode === 'stacked' ? 'layout-stacked' : 'layout-focus'}`}>
+                {mode === 'chat' ? (
+                  <div className="chat-fullscreen-wrap">
+                    {serverId ? (
+                      <ChatSession
+                        key={serverId}
+                        target={serverId}
+                        seedMessage={seedMessage}
+                      />
+                    ) : (
+                      <div className="empty">Select a server to start an AI chat session.</div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Control Deck (Studio / Params / Scripts) */}
+                    {layoutMode !== 'focus' && (
+                      <div className="control-deck">
+                        {mode === 'runbook' ? (
+                          <div className="runbook-studio">
+                            <div className="studio-card-head">
+                              <div className="studio-title-row">
+                                <h2>{runbook?.name ?? 'Select a runbook script'}</h2>
+                                {runbook && (
+                                  <span className="studio-filename-tag">{runbook.filename}</span>
+                                )}
+                              </div>
+                              {runbook?.description && (
+                                <p className="studio-desc">{runbook.description}</p>
+                              )}
+                            </div>
 
-              <div className="stage-actions">
-                <button
-                  data-variant="run"
-                  data-running={isRunLive}
-                  disabled={!canRun}
-                  onClick={startRun}
-                >
-                  {isRunLive ? (
-                    <span className="run-inner"><span className="run-spinner" /> RUNNING</span>
-                  ) : (
-                    'RUN'
-                  )}
-                </button>
-                {isRunLive && <button onClick={cancelRun}>Cancel</button>}
-                <button
-                  disabled={!runbookId || alertBusy}
-                  onClick={sendTestAlert}
-                  title="Send a test ntfy alert that simulates this script failing — nothing runs, no remediation"
-                >
-                  {alertBusy ? 'Sending…' : 'Test alert'}
-                </button>
-                <div className="spacer" />
-                {alertMsg && <span className="status">{alertMsg}</span>}
-                <span className="status" data-state={runState}>{runStatusLabel}</span>
+                            {/* Runbook parameter inputs */}
+                            <RunbookParams params={params} values={paramValues} onChange={setParamValue} />
+
+                            {/* High-Impact Action Deck */}
+                            <div className="studio-actions-bar">
+                              <button
+                                type="button"
+                                data-variant="run"
+                                data-running={isRunLive}
+                                disabled={!canRun}
+                                onClick={startRun}
+                              >
+                                {isRunLive ? (
+                                  <span className="run-inner">
+                                    <span className="run-spinner" /> RUNNING
+                                  </span>
+                                ) : (
+                                  'RUN'
+                                )}
+                              </button>
+
+                              {isRunLive && (
+                                <button type="button" className="btn-cancel" onClick={cancelRun}>
+                                  Cancel
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                className="btn-test-alert"
+                                disabled={!runbookId || alertBusy}
+                                onClick={sendTestAlert}
+                                title="Send a test ntfy alert that simulates this script failing"
+                              >
+                                {alertBusy ? 'Sending…' : 'Test Alert'}
+                              </button>
+
+                              <div className="spacer" />
+
+                              {alertMsg && <span className="action-msg">{alertMsg}</span>}
+                            </div>
+
+                            {/* Script Inspection Preview */}
+                            {runbook ? (
+                              <ScriptViewer contents={runbook.contents} title={runbook.name} />
+                            ) : (
+                              <div className="empty studio-empty">
+                                Select a runbook from the left explorer to configure parameters and preview bash code.
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* Shell Mode Controls */
+                          <div className="shell-studio">
+                            <div className="studio-card-head">
+                              <h2>Direct Interactive SSH Terminal</h2>
+                              <p className="studio-desc">
+                                Full bidirectional TTY session to{' '}
+                                <b>{selectedServer ? `${selectedServer.user}@${selectedServer.host}` : 'target host'}</b>.
+                              </p>
+                            </div>
+
+                            <div className="studio-actions-bar">
+                              <button
+                                type="button"
+                                data-variant="run"
+                                disabled={!canConnect}
+                                onClick={connectShellNow}
+                              >
+                                {shellState === 'connected' ? 'Connected' : 'Connect Shell'}
+                              </button>
+                              {isShellLive && (
+                                <button type="button" onClick={disconnectShell}>
+                                  Disconnect
+                                </button>
+                              )}
+                              <div className="spacer" />
+                              <span className="status" data-state={shellState}>
+                                {shellStatusLabel}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Live Terminal Deck */}
+                    <div className="terminal-deck">
+                      <div className="terminal-deck-header">
+                        <div className="term-deck-title">
+                          <span className="term-deck-dot" data-state={currentStatusBadge.state} />
+                          <span className="term-deck-label">
+                            {mode === 'shell' ? 'INTERACTIVE SSH STREAM' : 'RUNBOOK OUTPUT STREAM'}
+                          </span>
+                          <span className="term-deck-target">
+                            {selectedServer ? `${selectedServer.user}@${selectedServer.host}` : 'no target'}
+                          </span>
+                        </div>
+
+                        <div className="term-deck-controls">
+                          <button
+                            type="button"
+                            className="term-deck-btn"
+                            onClick={clearTerm}
+                            title="Clear Terminal Buffer"
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            className="term-deck-btn"
+                            onClick={() => termRef.current?.fit()}
+                            title="Fit Terminal"
+                          >
+                            Fit
+                          </button>
+                          <button
+                            type="button"
+                            className="term-deck-btn"
+                            onClick={() => setLayoutMode((prev) => (prev === 'focus' ? 'split' : 'focus'))}
+                            title={layoutMode === 'focus' ? 'Restore Split View' : 'Maximize Terminal'}
+                          >
+                            {layoutMode === 'focus' ? 'Restore ◫' : 'Maximize ⛶'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="terminal-deck-canvas">
+                        <Terminal
+                          ref={termRef}
+                          onInput={onTerminalInput}
+                          onResize={onTerminalResize}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-
-              {runbook
-                ? <ScriptViewer contents={runbook.contents} title={runbook.name} />
-                : <div className="empty">Choose a runbook on the right to preview its script.</div>}
-            </>
-          ) : (
-            <>
-              <div className="stage-head">
-                <h2>Shell</h2>
-                <div className="target">
-                  target: <b>{selectedServer ? `${selectedServer.user}@${selectedServer.host}` : '—'}</b>
-                </div>
-              </div>
-
-              {serverId && (
-                <ServerDetail detail={serverDetail} loading={detailLoading} error={detailError} />
-              )}
-
-              <div className="stage-actions">
-                <button data-variant="run" disabled={!canConnect} onClick={connectShellNow}>Connect</button>
-                {isShellLive && <button onClick={disconnectShell}>Disconnect</button>}
-                <div className="spacer" />
-                <span className="status" data-state={shellState}>{shellStatusLabel}</span>
-              </div>
-            </>
-          )}
-
-          {mode !== 'chat' && (
-            <Terminal ref={termRef} onInput={onTerminalInput} onResize={onTerminalResize} />
-          )}
-        </main>
-
-        {mode !== 'chat' && (
-          <RunbookList runbooks={filteredRunbooks} selectedId={runbookId} onSelect={(id) => updateParams({ runbook: id })} />
+            </main>
+          </div>
         )}
       </div>
-      )}
 
       {confirmRun && runbook?.confirm && (
         <ConfirmDialog
@@ -349,7 +732,10 @@ export function DesktopApp() {
           confirmLabel="Run anyway"
           danger
           onCancel={() => setConfirmRun(false)}
-          onConfirm={() => { setConfirmRun(false); doRun(); }}
+          onConfirm={() => {
+            setConfirmRun(false);
+            doRun();
+          }}
         />
       )}
     </div>
