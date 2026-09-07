@@ -81,22 +81,14 @@ elapsed=$((end - start))
 backup_size=$(du -sh "$backup_file" | cut -f1)
 log "Copy complete (${elapsed}s, size: ${backup_size})"
 
-# ── Phase 4: compress and remove uncompressed ────────────────────────────────
-log "Compressing ${backup_file}..."
-start=$(date +%s)
-gzip "$backup_file"
-end=$(date +%s)
-elapsed=$((end - start))
-
-backup_file_gz="${backup_file}.gz"
-compressed_size=$(du -sh "$backup_file_gz" | cut -f1)
-log "Compression complete (${elapsed}s, size: ${compressed_size})"
-
 echo "" >&2
 log "✓ Backup complete"
-log "Path: $backup_file_gz"
-log "Size: ${db_size} → ${compressed_size}"
+log "Path: $backup_file"
+log "Size: ${db_size}"
 echo "" >&2
 echo "Download with:" >&2
-echo "  scp hetzner:$backup_file_gz ./" >&2
+echo "  scp hetzner:$backup_file ./" >&2
+echo "" >&2
+echo "Optionally compress locally after download:" >&2
+echo "  gzip bfstats-sqlite-*.db" >&2
 echo "" >&2
