@@ -57,7 +57,7 @@ if [ -z "$db" ]; then
   fi
 
   # Search mount points for the PVC (could be /var/lib/rancher/k3s/storage or /mnt or elsewhere)
-  db=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 2 -type f -name "playertracker.db" 2>/dev/null | head -1)
+  db=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 5 -type f -name "playertracker.db" 2>/dev/null | head -1)
   if [ -z "$db" ]; then
     log "ERROR: Could not find playertracker.db in known mount paths"
     log "Hint: Set DB_PATH parameter with the correct path"
