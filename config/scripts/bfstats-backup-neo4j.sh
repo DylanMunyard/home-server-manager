@@ -35,7 +35,7 @@ log() { echo "[$(date +'%H:%M:%S')] $*" >&2; }
 
 # Restart deployments and re-enable background processing on exit
 trap 'log "Re-enabling background processing and restarting deployments..."
-      kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false --record >&2 || true
+      kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2 || true
       kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2 || true
       kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2 || true' EXIT
 
@@ -44,7 +44,7 @@ mkdir -p "$BACKUP_DIR"
 
 # ── Phase 1: disable background processing ───────────────────────────────────
 log "Disabling background processing (API reads stay online)..."
-kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=true --record >&2
+kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=true >&2
 
 log "Waiting for rollout to complete (pods restarting)..."
 kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2
@@ -60,7 +60,21 @@ sleep 2
 # Locate the PVC host path
 pvc_path="${NEO4J_PVC_PATH:-}"
 if [ -z "$pvc_path" ]; then
-  pvc_path="/var/lib/rancher/k3s/storage/pvc-2990ca0b-7a1d-4315-b912-256e470a13ca_bf42-stats_neo4j-pvc"
+  # Query kubectl to find the Neo4j PVC name dynamically
+  pvc_name=$(kubectl get deployment "$NEO4J_DEP" -n "$NS" -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
+  if [ -z "$pvc_name" ]; then
+    log "ERROR: Could not find Neo4j PVC name from deployment"
+    exit 1
+  fi
+
+  # Search /var/lib/rancher/k3s/storage for the mounted PVC
+  pvc_path=$(find /var/lib/rancher/k3s/storage -maxdepth 1 -type d -name "*${pvc_name}" 2>/dev/null | head -1)
+  if [ -z "$pvc_path" ]; then
+    log "ERROR: Could not find mounted PVC at /var/lib/rancher/k3s/storage for ${pvc_name}"
+    log "Hint: Set NEO4J_PVC_PATH parameter with the correct host path"
+    exit 1
+  fi
+  log "Located PVC ${pvc_name} at ${pvc_path}"
 fi
 [ -d "$pvc_path" ] || { log "ERROR: Neo4j PVC path not found: $pvc_path"; exit 1; }
 
@@ -79,11 +93,22 @@ elapsed=$((end - start))
 backup_size=$(du -sh "$backup_file" | cut -f1)
 log "Archive complete (${elapsed}s, size: ${backup_size})"
 
+# ── Phase 4: compress and remove uncompressed ────────────────────────────────
+log "Compressing ${backup_file}..."
+start=$(date +%s)
+gzip "$backup_file"
+end=$(date +%s)
+elapsed=$((end - start))
+
+backup_file_gz="${backup_file}.gz"
+compressed_size=$(du -sh "$backup_file_gz" | cut -f1)
+log "Compression complete (${elapsed}s, size: ${compressed_size})"
+
 echo "" >&2
 log "✓ Backup complete"
-log "Path: $backup_file"
-log "Size: ${pvc_size}"
+log "Path: $backup_file_gz"
+log "Size: ${pvc_size} → ${compressed_size}"
 echo "" >&2
 echo "Download with:" >&2
-echo "  scp hetzner:$backup_file ./" >&2
+echo "  scp hetzner:$backup_file_gz ./" >&2
 echo "" >&2

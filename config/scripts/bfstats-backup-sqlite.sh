@@ -30,11 +30,11 @@ BACKUP_DIR="${BACKUP_DIR:-/backup}"
 log() { echo "[$(date +'%H:%M:%S')] $*" >&2; }
 
 # Re-enable background processing on exit (success or failure)
-trap 'log "Re-enabling background processing..."; kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false --record >&2' EXIT
+trap 'log "Re-enabling background processing..."; kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2' EXIT
 
 # ── Phase 1: disable background processing ───────────────────────────────────
 log "Disabling background processing (API reads stay online)..."
-kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=true --record >&2
+kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=true >&2
 
 log "Waiting for rollout to complete (pods restarting)..."
 kubectl rollout status deployment/"${DEP}" -n "${NS}" --timeout=120s >&2
@@ -81,11 +81,22 @@ elapsed=$((end - start))
 backup_size=$(du -sh "$backup_file" | cut -f1)
 log "Copy complete (${elapsed}s, size: ${backup_size})"
 
+# ── Phase 4: compress and remove uncompressed ────────────────────────────────
+log "Compressing ${backup_file}..."
+start=$(date +%s)
+gzip "$backup_file"
+end=$(date +%s)
+elapsed=$((end - start))
+
+backup_file_gz="${backup_file}.gz"
+compressed_size=$(du -sh "$backup_file_gz" | cut -f1)
+log "Compression complete (${elapsed}s, size: ${compressed_size})"
+
 echo "" >&2
 log "✓ Backup complete"
-log "Path: $backup_file"
-log "Size: ${db_size}"
+log "Path: $backup_file_gz"
+log "Size: ${db_size} → ${compressed_size}"
 echo "" >&2
 echo "Download with:" >&2
-echo "  scp hetzner:$backup_file ./" >&2
+echo "  scp hetzner:$backup_file_gz ./" >&2
 echo "" >&2
