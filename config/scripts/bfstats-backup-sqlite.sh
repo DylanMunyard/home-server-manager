@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# bfstats-backup-sqlite — stop bfstats, checkpoint WAL, stream DB file to stdout (gzipped), restart
+# bfstats-backup-sqlite — disable background jobs, checkpoint WAL, save DB file locally (gzipped)
 #
-# Scales the bf42-stats deployment to 0 and waits for the pod to terminate.
-# When the last connection closes, SQLite auto-checkpoints the WAL back into the
-# main DB file. We then run a second explicit PRAGMA wal_checkpoint(TRUNCATE)
-# to guarantee the WAL is fully merged and removed, then stream the raw binary
-# DB file via `gzip -c` — no SQLite connection is open during the actual copy,
-# so it is impossible for the backup to affect the primary database.
+# Disables DISABLE_BACKGROUND_PROCESSING to pause all database writes while keeping the API
+# running for read traffic. Waits for the background jobs to shut down, then performs an
+# explicit WAL checkpoint (TRUNCATE mode) to guarantee a consistent snapshot, and saves the
+# raw binary DB file to /tmp as a gzipped backup. Logs progress with timestamps.
+# No SQLite connection is open during the copy, so it's impossible for the backup to affect
+# the primary database. Re-enables background jobs on completion (success or failure).
 #
-# Output is a gzipped binary SQLite file (.db.gz). Restore: gunzip > playertracker.db
+# Output path and scp command for manual download.
 #
 # params:
 #   DEPLOYMENT: { label: "k3s deployment name for the app", default: "bf42-stats" }
 #   NAMESPACE:  { label: "k3s namespace", default: "bf42-stats" }
 #   DB_PATH:    { label: "Path to sqlite db (blank = auto-locate on k3s PVC)" }
 # nodes: [ hetzner/bfstats ]
-# confirm: This will stop the bf42-stats deployment, checkpoint the SQLite database, then restart it. The app will be unavailable for ~30–60s. Continue?
+# confirm: This will pause background jobs (API reads stay online) while the database is backed up (~2-5 min). Continue?
 
 set -euo pipefail
 
@@ -26,14 +26,17 @@ command -v gzip     >/dev/null 2>&1 || { echo "gzip not installed on host" >&2; 
 NS="${NAMESPACE:-bf42-stats}"
 DEP="${DEPLOYMENT:-bf42-stats}"
 
-# Restart the deployment on exit (success or failure) so the app always comes back.
-trap 'echo "Restarting ${DEP}..." >&2; kubectl scale deployment/"${DEP}" -n "${NS}" --replicas=1 >&2' EXIT
+log() { echo "[$(date +'%H:%M:%S')] $*" >&2; }
 
-echo "Scaling down ${NS}/${DEP}..." >&2
-kubectl scale deployment/"${DEP}" -n "${NS}" --replicas=0 >&2
+# Re-enable background processing on exit (success or failure)
+trap 'log "Re-enabling background processing..."; kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false --record >&2' EXIT
 
-echo "Waiting for pod to terminate (SQLite auto-checkpoints on last connection close)..." >&2
-kubectl wait --for=delete pod -l "app=${DEP}" -n "${NS}" --timeout=90s >&2 2>/dev/null || true
+# ── Phase 1: disable background processing ───────────────────────────────────
+log "Disabling background processing (API reads stay online)..."
+kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=true --record >&2
+
+log "Waiting for rollout to complete (pods restarting)..."
+kubectl rollout status deployment/"${DEP}" -n "${NS}" --timeout=120s >&2
 
 # Locate the SQLite DB
 db="${DB_PATH:-}"
@@ -45,22 +48,40 @@ if [ -z "$db" ]; then
 fi
 [ -f "$db" ] || { echo "SQLite DB not found: $db" >&2; exit 1; }
 
-# ── Phase 1: explicit WAL checkpoint ─────────────────────────────────────────
-# SQLite auto-checkpoints when the last connection closes, but we make it
-# explicit and use TRUNCATE mode to remove the WAL file entirely. This is the
-# only write operation and uses a dedicated, short-lived connection.
-echo "Checkpointing WAL (TRUNCATE)..." >&2
+log "Database located: $db (size: $(du -sh "$db" | cut -f1))"
+
+# ── Phase 2: explicit WAL checkpoint ─────────────────────────────────────────
+log "Checkpointing WAL (TRUNCATE mode)..."
+start=$(date +%s)
 sqlite3 "$db" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null
+end=$(date +%s)
+log "Checkpoint complete ($((end - start))s)"
 
 # Sanity check: if a -wal file still exists after TRUNCATE it means there are
 # uncommitted transactions — abort rather than copy a potentially dirty state.
-if [ -f "${db}-wal" ] && [ "$(wc -c < "${db}-wal")" -gt 0 ]; then
-  echo "WAL file is non-empty after TRUNCATE checkpoint — aborting to protect data integrity" >&2
+if [ -f "${db}-wal" ] && [ "$(wc -c < "${db}-wal}")" -gt 0 ]; then
+  log "ERROR: WAL file is non-empty after TRUNCATE checkpoint — aborting to protect data integrity"
   exit 1
 fi
 
-# ── Phase 2: stream raw binary file ──────────────────────────────────────────
-# gzip -c reads the file as plain bytes. No SQLite connection is opened.
-# The primary database file cannot be affected by this step.
-echo "Streaming ${db} ($(du -sh "$db" | cut -f1)) ..." >&2
-gzip -c "$db"
+# ── Phase 3: save to local backup file ──────────────────────────────────────
+backup_file="/tmp/bfstats-sqlite-$(date +%Y%m%d-%H%M%S).db.gz"
+db_size=$(du -sh "$db" | cut -f1)
+log "Compressing and saving to ${backup_file} (uncompressed: ${db_size})..."
+
+start=$(date +%s)
+gzip -c "$db" > "$backup_file"
+end=$(date +%s)
+elapsed=$((end - start))
+
+compressed_size=$(du -sh "$backup_file" | cut -f1)
+log "Backup complete (${elapsed}s, compressed: ${compressed_size})"
+
+echo "" >&2
+log "✓ Backup complete"
+log "Path: $backup_file"
+log "Size: ${db_size} → ${compressed_size}"
+echo "" >&2
+echo "Download with:" >&2
+echo "  scp hetzner:$backup_file ./" >&2
+echo "" >&2
