@@ -1,30 +1,32 @@
 #!/usr/bin/env bash
-# bfstats-backup-neo4j — disable background jobs, shut down neo4j cleanly, tar the store to host SSD
+# bfstats-backup-neo4j — disable background jobs, shut down neo4j, compress, upload to Azure
 #
 # Disables DISABLE_BACKGROUND_PROCESSING to pause all database writes while keeping the API
 # running for read traffic. Scales the Neo4j deployment to 0 (ensuring it flushes and closes
-# store files cleanly), then tars the Neo4j data directory from the local-path PVC host path
-# and saves it to /backup on the host SSD. Logs progress with timestamps. Re-enables background
-# jobs and restarts Neo4j on completion (success or failure).
+# store files cleanly), tars the Neo4j data directory from the local-path PVC host path,
+# compresses with zstd (parallel), and uploads to Azure. Logs progress with timestamps.
+# Re-enables background jobs and restarts Neo4j on completion (success or failure).
 #
 # Neo4j 5 Community Edition stores its data at:
 #   <pvc-host-path>/databases/neo4j/   (store files)
 #   <pvc-host-path>/transactions/neo4j/ (tx logs)
 # Both are included in the archive for a complete restorable backup.
 #
-# Output path and scp command for manual download.
-#
 # params:
 #   NAMESPACE:  { label: "k3s namespace for Neo4j", default: "bf42-stats" }
 #   NEO4J_PVC_PATH: { label: "Host path to Neo4j PVC (blank = auto-locate)", default: "" }
 #   BACKUP_DIR: { label: "Host backup directory", default: "/backup" }
+#   AZURE_SAS_URL: { label: "Azure Blob SAS URL (e.g., https://account.blob.core.windows.net/container?sv=...)", required: true }
 # nodes: [ hetzner/bfstats ]
-# confirm: This will pause background jobs and shut down Neo4j cleanly for backup (~5-15 min). API reads stay online. Continue?
+# confirm: This will pause background jobs and shut down Neo4j cleanly for backup (~15-20 min total). API reads stay online. Continue?
 
 set -euo pipefail
 
 command -v kubectl >/dev/null 2>&1 || { echo "kubectl not installed on host" >&2; exit 2; }
 command -v tar     >/dev/null 2>&1 || { echo "tar not installed on host" >&2; exit 2; }
+command -v zstd    >/dev/null 2>&1 || { echo "Installing zstd..." >&2; apt-get update && apt-get install -y zstd >&2; }
+command -v azcopy  >/dev/null 2>&1 || { echo "Installing azcopy..." >&2; curl -sL https://aka.ms/downloadazcopy-v10-linux-arm64 -o /tmp/azcopy.tar.gz && tar -xzf /tmp/azcopy.tar.gz -C /tmp && sudo mv /tmp/azcopy_linux_arm64_*/azcopy /usr/local/bin/ && chmod +x /usr/local/bin/azcopy >&2; }
+[ -z "${AZURE_SAS_URL:-}" ] && { echo "AZURE_SAS_URL parameter is required" >&2; exit 1; }
 
 NS="${NAMESPACE:-bf42-stats}"
 NEO4J_DEP="neo4j"
@@ -93,14 +95,33 @@ elapsed=$((end - start))
 backup_size=$(du -sh "$backup_file" | cut -f1)
 log "Archive complete (${elapsed}s, size: ${backup_size})"
 
+# ── Phase 4: compress with zstd ──────────────────────────────────────────────
+log "Compressing with zstd (using all available cores)..."
+start=$(date +%s)
+zstd -T0 "$backup_file" -o "$backup_file.zst"
+end=$(date +%s)
+elapsed=$((end - start))
+
+backup_file_zst="${backup_file}.zst"
+compressed_size=$(du -sh "$backup_file_zst" | cut -f1)
+compression_ratio=$(echo "scale=1; $(stat -c%s "$backup_file") * 100 / $(stat -c%s "$backup_file_zst")" | bc)
+log "Compression complete (${elapsed}s, ${backup_size} → ${compressed_size}, ${compression_ratio}%)"
+
+# ── Phase 5: upload to Azure ─────────────────────────────────────────────────
+log "Uploading to Azure..."
+start=$(date +%s)
+azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}/" --quiet
+end=$(date +%s)
+elapsed=$((end - start))
+
+log "Upload complete (${elapsed}s)"
+
+# ── Phase 6: cleanup ─────────────────────────────────────────────────────────
+log "Cleaning up uncompressed backup..."
+rm -f "$backup_file"
+
 echo "" >&2
-log "✓ Backup complete"
-log "Path: $backup_file"
-log "Size: ${pvc_size}"
-echo "" >&2
-echo "Download with:" >&2
-echo "  scp hetzner:$backup_file ./" >&2
-echo "" >&2
-echo "Optionally compress locally after download:" >&2
-echo "  gzip bfstats-neo4j-*.tar" >&2
+log "✓ Backup complete and uploaded to Azure"
+log "File: $(basename "$backup_file_zst")"
+log "Size: ${compressed_size}"
 echo "" >&2
