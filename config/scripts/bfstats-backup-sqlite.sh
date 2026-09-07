@@ -49,10 +49,21 @@ mkdir -p "$BACKUP_DIR"
 # Locate the SQLite DB
 db="${DB_PATH:-}"
 if [ -z "$db" ]; then
-  set +f
-  set -- /var/lib/rancher/k3s/storage/pvc-*_bf42-stats_*/playertracker.db
-  set -f
-  db="$1"
+  # Query kubectl to find the bf42-stats PVC name dynamically
+  pvc_name=$(kubectl get deployment bf42-stats -n "$NS" -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
+  if [ -z "$pvc_name" ]; then
+    log "ERROR: Could not find bf42-stats PVC name from deployment"
+    exit 1
+  fi
+
+  # Search mount points for the PVC (could be /var/lib/rancher/k3s/storage or /mnt or elsewhere)
+  db=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 2 -type f -name "playertracker.db" 2>/dev/null | head -1)
+  if [ -z "$db" ]; then
+    log "ERROR: Could not find playertracker.db in known mount paths"
+    log "Hint: Set DB_PATH parameter with the correct path"
+    exit 1
+  fi
+  log "Located database at: $db"
 fi
 [ -f "$db" ] || { log "ERROR: SQLite DB not found: $db"; exit 1; }
 
