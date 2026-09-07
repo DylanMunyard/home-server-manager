@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# bfstats-backup-sqlite — disable background jobs, checkpoint WAL, save DB file locally (gzipped)
+# bfstats-backup-sqlite — disable background jobs, checkpoint WAL, copy DB to host SSD
 #
 # Disables DISABLE_BACKGROUND_PROCESSING to pause all database writes while keeping the API
 # running for read traffic. Waits for the background jobs to shut down, then performs an
-# explicit WAL checkpoint (TRUNCATE mode) to guarantee a consistent snapshot, and saves the
-# raw binary DB file to /tmp as a gzipped backup. Logs progress with timestamps.
+# explicit WAL checkpoint (TRUNCATE mode) to guarantee a consistent snapshot, and copies the
+# raw binary DB file to /backup on the host SSD. Logs progress with timestamps.
 # No SQLite connection is open during the copy, so it's impossible for the backup to affect
-# the primary database. Re-enables background jobs on completion (success or failure).
+# the primary database. Re-enables background jobs immediately after the copy completes.
 #
 # Output path and scp command for manual download.
 #
@@ -14,6 +14,7 @@
 #   DEPLOYMENT: { label: "k3s deployment name for the app", default: "bf42-stats" }
 #   NAMESPACE:  { label: "k3s namespace", default: "bf42-stats" }
 #   DB_PATH:    { label: "Path to sqlite db (blank = auto-locate on k3s PVC)" }
+#   BACKUP_DIR: { label: "Host backup directory", default: "/backup" }
 # nodes: [ hetzner/bfstats ]
 # confirm: This will pause background jobs (API reads stay online) while the database is backed up (~2-5 min). Continue?
 
@@ -21,10 +22,10 @@ set -euo pipefail
 
 command -v kubectl  >/dev/null 2>&1 || { echo "kubectl not installed on host" >&2; exit 2; }
 command -v sqlite3  >/dev/null 2>&1 || { echo "sqlite3 not installed on host" >&2; exit 2; }
-command -v gzip     >/dev/null 2>&1 || { echo "gzip not installed on host" >&2; exit 2; }
 
 NS="${NAMESPACE:-bf42-stats}"
 DEP="${DEPLOYMENT:-bf42-stats}"
+BACKUP_DIR="${BACKUP_DIR:-/backup}"
 
 log() { echo "[$(date +'%H:%M:%S')] $*" >&2; }
 
@@ -38,6 +39,9 @@ kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=tru
 log "Waiting for rollout to complete (pods restarting)..."
 kubectl rollout status deployment/"${DEP}" -n "${NS}" --timeout=120s >&2
 
+# Create backup directory if needed
+mkdir -p "$BACKUP_DIR"
+
 # Locate the SQLite DB
 db="${DB_PATH:-}"
 if [ -z "$db" ]; then
@@ -46,9 +50,10 @@ if [ -z "$db" ]; then
   set -f
   db="$1"
 fi
-[ -f "$db" ] || { echo "SQLite DB not found: $db" >&2; exit 1; }
+[ -f "$db" ] || { log "ERROR: SQLite DB not found: $db"; exit 1; }
 
-log "Database located: $db (size: $(du -sh "$db" | cut -f1))"
+db_size=$(du -sh "$db" | cut -f1)
+log "Database located: $db (size: ${db_size})"
 
 # ── Phase 2: explicit WAL checkpoint ─────────────────────────────────────────
 log "Checkpointing WAL (TRUNCATE mode)..."
@@ -64,23 +69,22 @@ if [ -f "${db}-wal" ] && [ "$(wc -c < "${db}-wal}")" -gt 0 ]; then
   exit 1
 fi
 
-# ── Phase 3: save to local backup file ──────────────────────────────────────
-backup_file="/tmp/bfstats-sqlite-$(date +%Y%m%d-%H%M%S).db.gz"
-db_size=$(du -sh "$db" | cut -f1)
-log "Compressing and saving to ${backup_file} (uncompressed: ${db_size})..."
+# ── Phase 3: copy to host SSD ────────────────────────────────────────────────
+backup_file="${BACKUP_DIR}/bfstats-sqlite-$(date +%Y%m%d-%H%M%S).db"
+log "Copying to ${backup_file}..."
 
 start=$(date +%s)
-gzip -c "$db" > "$backup_file"
+cp "$db" "$backup_file"
 end=$(date +%s)
 elapsed=$((end - start))
 
-compressed_size=$(du -sh "$backup_file" | cut -f1)
-log "Backup complete (${elapsed}s, compressed: ${compressed_size})"
+backup_size=$(du -sh "$backup_file" | cut -f1)
+log "Copy complete (${elapsed}s, size: ${backup_size})"
 
 echo "" >&2
 log "✓ Backup complete"
 log "Path: $backup_file"
-log "Size: ${db_size} → ${compressed_size}"
+log "Size: ${db_size}"
 echo "" >&2
 echo "Download with:" >&2
 echo "  scp hetzner:$backup_file ./" >&2
