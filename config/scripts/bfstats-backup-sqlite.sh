@@ -74,7 +74,7 @@ if [ -f "${db}-wal" ] && [ "$(wc -c < "${db}-wal}")" -gt 0 ]; then
 fi
 
 # ── Phase 3: copy to host SSD ────────────────────────────────────────────────
-backup_file="${BACKUP_DIR}/bfstats-sqlite-$(date +%Y%m%d-%H%M%S).db"
+backup_file="${BACKUP_DIR}/bfstats-sqlite-latest.db"
 log "Copying to ${backup_file}..."
 
 start=$(date +%s)

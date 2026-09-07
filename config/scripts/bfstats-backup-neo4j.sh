@@ -84,7 +84,7 @@ pvc_size=$(du -sh "$pvc_path" | cut -f1)
 log "Neo4j data directory located (size: ${pvc_size})"
 
 # ── Phase 3: archive to backup file (uncompressed for speed) ──────────────────
-backup_file="${BACKUP_DIR}/bfstats-neo4j-$(date +%Y%m%d-%H%M%S).tar"
+backup_file="${BACKUP_DIR}/bfstats-neo4j-latest.tar"
 log "Archiving ${pvc_path} to ${backup_file}..."
 
 start=$(date +%s)
