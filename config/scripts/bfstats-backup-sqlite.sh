@@ -104,7 +104,7 @@ kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=fal
 # ── Phase 4: compress with zstd ──────────────────────────────────────────────
 log "Compressing with zstd (using all available cores)..."
 start=$(date +%s)
-zstd -T0 "$backup_file" -o "$backup_file.zst"
+zstd -f -T0 "$backup_file" -o "$backup_file.zst"
 end=$(date +%s)
 elapsed=$((end - start))
 
