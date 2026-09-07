@@ -116,15 +116,15 @@ log "Compression complete (${elapsed}s, ${backup_size} → ${compressed_size}, $
 # ── Phase 5: upload to Azure ─────────────────────────────────────────────────
 log "Uploading to Azure (${compressed_size})..."
 start=$(date +%s)
-azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}/"
+azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}/" --overwrite=true
 end=$(date +%s)
 elapsed=$((end - start))
 
 log "Upload complete (${elapsed}s)"
 
 # ── Phase 6: cleanup ─────────────────────────────────────────────────────────
-log "Cleaning up uncompressed backup..."
-rm -f "$backup_file"
+log "Cleaning up backup files..."
+rm -f "$backup_file" "$backup_file_zst"
 
 echo "" >&2
 log "✓ Backup complete and uploaded to Azure"
