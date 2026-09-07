@@ -24,6 +24,7 @@ set -euo pipefail
 command -v kubectl  >/dev/null 2>&1 || { echo "kubectl not installed on host" >&2; exit 2; }
 command -v sqlite3  >/dev/null 2>&1 || { echo "sqlite3 not installed on host" >&2; exit 2; }
 command -v zstd     >/dev/null 2>&1 || { echo "Installing zstd..." >&2; apt-get update && apt-get install -y zstd >&2; }
+command -v bc       >/dev/null 2>&1 || { echo "Installing bc..." >&2; apt-get install -y bc >&2; }
 command -v azcopy   >/dev/null 2>&1 || { echo "Installing azcopy..." >&2; curl -sL https://aka.ms/downloadazcopy-v10-linux-arm64 -o /tmp/azcopy.tar.gz && tar -xzf /tmp/azcopy.tar.gz -C /tmp && sudo mv /tmp/azcopy_linux_arm64_*/azcopy /usr/local/bin/ && chmod +x /usr/local/bin/azcopy >&2; }
 [ -z "${AZURE_SAS_URL:-}" ] && { echo "AZURE_SAS_URL parameter is required" >&2; exit 1; }
 
@@ -33,8 +34,8 @@ BACKUP_DIR="${BACKUP_DIR:-/backup}"
 
 log() { echo "[$(date +'%H:%M:%S')] $*" >&2; }
 
-# Re-enable background processing on exit (success or failure)
-trap 'log "Re-enabling background processing..."; kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2' EXIT
+# On error, try to re-enable background processing before exiting
+trap 'if [ $? -ne 0 ]; then log "ERROR: backing out, re-enabling background processing..."; kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2; fi' EXIT
 
 # ── Phase 1: disable background processing ───────────────────────────────────
 log "Disabling background processing (API reads stay online)..."
@@ -96,6 +97,10 @@ elapsed=$((end - start))
 backup_size=$(du -sh "$backup_file" | cut -f1)
 log "Copy complete (${elapsed}s, size: ${backup_size})"
 
+# Re-enable background processing now that the database is no longer accessed
+log "Re-enabling background processing (API writes resuming)..."
+kubectl set env deployment/"${DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2
+
 # ── Phase 4: compress with zstd ──────────────────────────────────────────────
 log "Compressing with zstd (using all available cores)..."
 start=$(date +%s)
@@ -109,9 +114,9 @@ compression_ratio=$(echo "scale=1; $(stat -c%s "$backup_file") * 100 / $(stat -c
 log "Compression complete (${elapsed}s, ${backup_size} → ${compressed_size}, ${compression_ratio}%)"
 
 # ── Phase 5: upload to Azure ─────────────────────────────────────────────────
-log "Uploading to Azure..."
+log "Uploading to Azure (${compressed_size})..."
 start=$(date +%s)
-azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}/" --quiet
+azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}/"
 end=$(date +%s)
 elapsed=$((end - start))
 
