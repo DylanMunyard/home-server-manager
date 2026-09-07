@@ -116,7 +116,7 @@ log "Compression complete (${elapsed}s, ${backup_size} → ${compressed_size}, $
 # ── Phase 5: upload to Azure ─────────────────────────────────────────────────
 log "Uploading to Azure (${compressed_size})..."
 start=$(date +%s)
-azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}/" --overwrite=true
+azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}" --overwrite=true
 end=$(date +%s)
 elapsed=$((end - start))
 
