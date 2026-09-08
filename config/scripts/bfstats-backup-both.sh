@@ -182,7 +182,8 @@ log "Checkpoint complete ($((end - start))s)"
 
 # Sanity check: if a -wal file still exists after TRUNCATE it means there are
 # uncommitted transactions — abort rather than copy a potentially dirty state.
-if [ -f "${db}-wal" ] && [ "$(wc -c < "${db}-wal}")" -gt 0 ]; then
+wal_size=$(stat -c%s "${db}-wal" 2>/dev/null || echo 0)
+if [ "$wal_size" -gt 0 ]; then
   log "ERROR: WAL file is non-empty after TRUNCATE checkpoint — aborting to protect data integrity"
   exit 1
 fi
