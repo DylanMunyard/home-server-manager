@@ -119,7 +119,10 @@ upload_to_azure() {
 
   log "Uploading $name to Azure..."
   start=$(date +%s)
-  azcopy copy "$backup_file" "${AZURE_SAS_URL}" --overwrite=true
+  # </dev/null is load-bearing: runbooks run as `bash -s` with the script itself
+  # on stdin, and azcopy reads stdin for lifecycle messages — without this it
+  # swallows the rest of the script and bash silently exits at EOF.
+  azcopy copy "$backup_file" "${AZURE_SAS_URL}" --overwrite=true </dev/null
   end=$(date +%s)
   elapsed=$((end - start))
 
