@@ -20,6 +20,13 @@ async function buildConnectOptions(server: ServerConfig) {
     port: server.port,
     username: server.user,
     readyTimeout: 15_000,
+    // Long runbooks (the bfstats backup goes quiet for 80s+ during a 24G copy)
+    // held a WAN connection open with zero packets in flight, so NAT/firewall
+    // conntrack on either end could drop it silently — output just stopped, no
+    // error, no EXIT trap. Keepalives hold the path open and turn a genuinely
+    // dead peer into a prompt error (~2 min) instead of an infinite hang.
+    keepaliveInterval: 15_000,
+    keepaliveCountMax: 8,
   };
   if (server.auth.type === 'password') {
     return { ...base, password: server.auth.password };
