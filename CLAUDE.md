@@ -346,3 +346,8 @@ quick checks.
 - Multi-node UI / fan-out (backend already supports it — UI is single-node v1)
 - The pencil/paper hand-drawn aesthetic from the original design wireframes
   (that was the medium; the chosen look is brutalist-minimalist)
+
+## Git workflow
+
+**Always push after committing.** Commit directly to `main` (no feature branches).
+Don't prompt for confirmation on the push — assume it should always go to remote.
