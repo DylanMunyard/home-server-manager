@@ -126,11 +126,14 @@ upload_to_azure() {
   log "$name upload complete (${elapsed}s)"
 }
 
-# Restart deployments, re-enable background processing, and cleanup backups on exit
-trap 'log "Re-enabling background processing and restarting deployments..."
-      kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2 || true
-      kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2 || true
-      kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2 || true
+# On error, re-enable background processing and restart. Always cleanup backups.
+trap 'exit_code=$?
+      if [ $exit_code -ne 0 ]; then
+        log "ERROR: backing out, re-enabling background processing and restarting..."
+        kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2 || true
+        kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2 || true
+        kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2 || true
+      fi
       log "Cleaning up backup files from ${BACKUP_DIR}..."
       rm -f "${BACKUP_DIR}"/bfstats-neo4j-latest.* "${BACKUP_DIR}"/bfstats-sqlite-latest.* 2>/dev/null || true' EXIT
 
