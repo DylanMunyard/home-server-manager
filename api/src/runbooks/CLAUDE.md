@@ -41,3 +41,29 @@ echo "installing $PKG with $MANAGER"
   manual runs. Declared defaults still apply when a job omits a value. A
   malformed `# params:` block is non-fatal — it logs a warning and the runbook
   loads with no params (same "don't take down the API" stance as jobs).
+
+## `# detach:` — surviving a client disconnect
+
+A separate top-level directive (parsed like `# confirm:`, see
+`parseDetach` in `runbooks.loader.ts`). `# detach: true` — or a bare
+`# detach:` — sets `Runbook.detach`; `false`, a malformed value, or absence
+leaves it off. It fails **closed** on purpose: a typo shouldn't silently start
+orphaning SSH sessions.
+
+- **Only `/ws/run` honours it.** `ssh.routes.ts` normally wires
+  `ws.on('close', () => handle.cancel())`; a detached runbook skips the cancel
+  and lets the run finish server-side. Jobs go through `collectScript` and never
+  had a socket to lose, so they're unaffected either way.
+- **Streaming is unchanged.** Output flows live exactly as before while the
+  socket is open — `send()` already no-ops once the WS leaves `OPEN`. What you
+  give up is everything emitted *after* the disconnect: there's no run
+  persistence, so there's nothing to reattach to. Verify a detached run from its
+  side effect, not the terminal.
+- **Both branches log** ("cancelling run" / "detached run continues
+  server-side"). Before this, a cancelled run and a hung one looked identical
+  from the terminal, which is exactly why `bfstats-backup-both` appeared to stop
+  at random. Keep the logging if you touch this.
+- Related: SSH keepalives (`keepaliveInterval` in `ssh.session.ts`) cover the
+  *other* half — a long runbook going quiet long enough for NAT/conntrack to
+  evict the connection. Detach handles the client leaving; keepalives handle the
+  path dying underneath it.

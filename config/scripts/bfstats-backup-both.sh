@@ -22,6 +22,7 @@
 #   BACKUP_DIR: { label: "Host backup directory", default: "/backup" }
 #   AZURE_SAS_URL: { label: "Azure Blob SAS URL (e.g., https://account.blob.core.windows.net/container?sv=...)", required: true }
 # nodes: [ hetzner/bfstats ]
+# detach: true
 # confirm: This will pause background jobs and shut down Neo4j cleanly, backing up both Neo4j and SQLite to Azure (~15-20 min total). API reads stay online. Continue?
 
 set -euo pipefail

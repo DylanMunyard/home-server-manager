@@ -33,6 +33,17 @@ export type Runbook = {
    * If present, the UI hides it unless a matching node is selected.
    */
   nodes?: string[];
+  /**
+   * Keep the run alive when the client goes away. By default a manual run is
+   * cancelled the moment its WebSocket closes, which is right for the usual
+   * short runbook — but it means a long one (the bfstats backup takes ~20min
+   * and emits nothing for 80s+ at a time) dies to a slept laptop, a discarded
+   * tab, or a proxy hanging up an idle socket. Detached runs keep going on the
+   * server; output produced after the disconnect is simply lost, since there's
+   * no persistence to reattach to. Manual-run path only — jobs never had a
+   * client to lose.
+   */
+  detach?: boolean;
   filename: string;
   contents: string;
 };
@@ -86,8 +97,8 @@ function extractDescription(id: string, contents: string): string {
     const m = /^\s*#\s?(.*)$/.exec(raw);
     if (!m) break;
     const body = m[1].trimEnd();
-    // The `# params:` / `# confirm:` directives aren't prose — stop here.
-    if (/^(params|confirm)\s*:/.test(body)) break;
+    // The `# params:` / `# confirm:` / `# detach:` directives aren't prose — stop here.
+    if (/^(params|confirm|detach)\s*:/.test(body)) break;
     if (body === '') {
       flush();
       continue;
@@ -275,6 +286,32 @@ function parseNodes(contents: string): string[] | undefined {
   return undefined;
 }
 
+/**
+ * A top-level `# detach: true` directive in the header — see `Runbook.detach`.
+ * Bare `detach:` or any truthy YAML value ⇒ true; `false`/null/absent ⇒ false.
+ * Lenient like the rest, and fails *closed*: a malformed value leaves the run
+ * cancel-on-disconnect rather than silently orphaning SSH sessions.
+ */
+function parseDetach(contents: string): boolean {
+  const lines = contents.split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  if (i < lines.length && lines[i].startsWith('#!')) i++;
+
+  for (; i < lines.length; i++) {
+    const m = /^\s*#\s?(.*)$/.exec(lines[i]);
+    if (!m) break; // first non-comment line ends the header region
+    const dm = /^detach\s*:\s*(.*)$/.exec(m[1].trim());
+    if (!dm) continue;
+    const raw = dm[1].trim();
+    if (raw === '') return true;
+    let val: unknown;
+    try { val = YAML.parse(raw); } catch { return false; }
+    return val !== false && val != null;
+  }
+  return false;
+}
+
 function parseRunbook(id: string, filename: string, contents: string): Runbook {
   return {
     id,
@@ -283,6 +320,7 @@ function parseRunbook(id: string, filename: string, contents: string): Runbook {
     params: parseParams(id, contents),
     confirm: parseConfirm(contents),
     nodes: parseNodes(contents),
+    detach: parseDetach(contents),
     filename,
     contents,
   };

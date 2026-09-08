@@ -42,7 +42,22 @@ export async function sshRoutes(app: FastifyInstance) {
     const prelude = exportPrelude(resolveParamValues(runbook.params, provided));
 
     const handle = runScript(server, prelude + runbook.contents, send);
-    ws.on('close', () => handle.cancel());
+
+    // A losing client normally cancels the run. `# detach: true` opts out for
+    // runbooks too long to stay tethered to a browser tab (see Runbook.detach) —
+    // they finish server-side and their remaining output is dropped. Either way
+    // log it: a silently-cancelled run is indistinguishable from a hung one in
+    // the terminal, which is how the bfstats backup kept "stopping randomly".
+    ws.on('close', () => {
+      const ctx = { runbook: runbookId, server: serverId };
+      if (runbook.detach) {
+        app.log.info(ctx, 'client disconnected — detached run continues server-side');
+        return;
+      }
+      app.log.info(ctx, 'client disconnected — cancelling run');
+      handle.cancel();
+    });
+
     await handle.done;
     ws.close();
   });

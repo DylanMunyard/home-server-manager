@@ -111,6 +111,15 @@ set -euo pipefail
   declared params are injected; every declared one is always set (safe under
   `set -u`). No prompting — there's no TTY. Full field semantics + job
   interplay: `api/src/runbooks/CLAUDE.md`.
+- **`# detach: true`** keeps a *manual* run alive when its WebSocket closes.
+  The default is to cancel on disconnect (right for a short runbook, and it
+  stops orphaned SSH sessions), but a long one dies to a slept laptop or a
+  proxy dropping an idle socket — which is how `bfstats-backup-both` kept
+  "randomly stopping" ~20 min in. Detached runs still stream normally while
+  you're watching; output produced *after* a disconnect is lost, since there's
+  no persistence to reattach to. Confirm those from the side effect (the blob,
+  an ntfy alert), not the terminal. Jobs are unaffected — they never had a
+  client to lose.
 
 ## Recurring jobs — one file per job
 
