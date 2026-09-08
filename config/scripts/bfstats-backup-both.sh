@@ -41,6 +41,91 @@ BACKUP_DIR="${BACKUP_DIR:-/backup}"
 
 log() { echo "[$(date +'%H:%M:%S')] $*" >&2; }
 
+locate_pvc() {
+  local dep="$1"
+  local pvc_path="${2:-}"
+
+  if [ -n "$pvc_path" ]; then
+    [ -d "$pvc_path" ] || { log "ERROR: PVC path not found: $pvc_path"; exit 1; }
+    echo "$pvc_path"
+    return
+  fi
+
+  local pvc_name=$(kubectl get deployment "$dep" -n "$NS" -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
+  if [ -z "$pvc_name" ]; then
+    log "ERROR: Could not find $dep PVC name from deployment"
+    exit 1
+  fi
+
+  pvc_path=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 5 -type d -name "*${pvc_name}" 2>/dev/null | head -1)
+  if [ -z "$pvc_path" ]; then
+    log "ERROR: Could not find mounted PVC at /var/lib/rancher/k3s/storage for ${pvc_name}"
+    log "Hint: Set NEO4J_PVC_PATH parameter with the correct host path"
+    exit 1
+  fi
+
+  log "Located PVC ${pvc_name} at ${pvc_path}"
+  echo "$pvc_path"
+}
+
+locate_db() {
+  local db="${1:-}"
+
+  if [ -n "$db" ]; then
+    [ -f "$db" ] || { log "ERROR: SQLite DB not found: $db"; exit 1; }
+    echo "$db"
+    return
+  fi
+
+  local pvc_name=$(kubectl get deployment bf42-stats -n "$NS" -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
+  if [ -z "$pvc_name" ]; then
+    log "ERROR: Could not find bf42-stats PVC name from deployment"
+    exit 1
+  fi
+
+  db=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 5 -type f -name "playertracker.db" 2>/dev/null | head -1)
+  if [ -z "$db" ]; then
+    log "ERROR: Could not find playertracker.db in known mount paths"
+    log "Hint: Set DB_PATH parameter with the correct path"
+    exit 1
+  fi
+
+  log "Located database at: $db"
+  echo "$db"
+}
+
+compress_and_report() {
+  local backup_file="$1"
+  local name="$2"
+
+  log "Compressing $name with zstd (using all available cores)..."
+  start=$(date +%s)
+  zstd -f -T0 "$backup_file" -o "$backup_file.zst"
+  end=$(date +%s)
+  elapsed=$((end - start))
+
+  local backup_file_zst="${backup_file}.zst"
+  local compressed_size=$(du -sh "$backup_file_zst" | cut -f1)
+  local original_size=$(du -sh "$backup_file" | cut -f1)
+  local compression_ratio=$(echo "scale=1; $(stat -c%s "$backup_file") * 100 / $(stat -c%s "$backup_file_zst")" | bc)
+  log "$name compression complete (${elapsed}s, ${original_size} → ${compressed_size}, ${compression_ratio}%)"
+
+  echo "$backup_file_zst"
+}
+
+upload_to_azure() {
+  local backup_file="$1"
+  local name="$2"
+
+  log "Uploading $name to Azure..."
+  start=$(date +%s)
+  azcopy copy "$backup_file" "${AZURE_SAS_URL}" --overwrite=true
+  end=$(date +%s)
+  elapsed=$((end - start))
+
+  log "$name upload complete (${elapsed}s)"
+}
+
 # Restart deployments and re-enable background processing on exit
 trap 'log "Re-enabling background processing and restarting deployments..."
       kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2 || true
@@ -65,51 +150,12 @@ log "Waiting for neo4j pod to terminate..."
 kubectl wait --for=delete pod -l "app=${NEO4J_DEP}" -n "${NS}" --timeout=120s >&2 2>/dev/null || true
 sleep 2
 
-# ── Phase 3: locate Neo4j PVC ─────────────────────────────────────────────────
-pvc_path="${NEO4J_PVC_PATH:-}"
-if [ -z "$pvc_path" ]; then
-  # Query kubectl to find the Neo4j PVC name dynamically
-  pvc_name=$(kubectl get deployment "$NEO4J_DEP" -n "$NS" -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
-  if [ -z "$pvc_name" ]; then
-    log "ERROR: Could not find Neo4j PVC name from deployment"
-    exit 1
-  fi
-
-  # Search mount points for the PVC (could be /var/lib/rancher/k3s/storage or /mnt or elsewhere)
-  pvc_path=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 5 -type d -name "*${pvc_name}" 2>/dev/null | head -1)
-  if [ -z "$pvc_path" ]; then
-    log "ERROR: Could not find mounted PVC at /var/lib/rancher/k3s/storage for ${pvc_name}"
-    log "Hint: Set NEO4J_PVC_PATH parameter with the correct host path"
-    exit 1
-  fi
-  log "Located PVC ${pvc_name} at ${pvc_path}"
-fi
-[ -d "$pvc_path" ] || { log "ERROR: Neo4j PVC path not found: $pvc_path"; exit 1; }
-
+# ── Phase 3: locate Neo4j PVC and SQLite DB ───────────────────────────────────
+pvc_path=$(locate_pvc "$NEO4J_DEP" "${NEO4J_PVC_PATH:-}")
 pvc_size=$(du -sh "$pvc_path" | cut -f1)
 log "Neo4j data directory located (size: ${pvc_size})"
 
-# ── Phase 4: locate SQLite DB ─────────────────────────────────────────────────
-db="${DB_PATH:-}"
-if [ -z "$db" ]; then
-  # Query kubectl to find the bf42-stats PVC name dynamically
-  pvc_name=$(kubectl get deployment bf42-stats -n "$NS" -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
-  if [ -z "$pvc_name" ]; then
-    log "ERROR: Could not find bf42-stats PVC name from deployment"
-    exit 1
-  fi
-
-  # Search mount points for the PVC (could be /var/lib/rancher/k3s/storage or /mnt or elsewhere)
-  db=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 5 -type f -name "playertracker.db" 2>/dev/null | head -1)
-  if [ -z "$db" ]; then
-    log "ERROR: Could not find playertracker.db in known mount paths"
-    log "Hint: Set DB_PATH parameter with the correct path"
-    exit 1
-  fi
-  log "Located database at: $db"
-fi
-[ -f "$db" ] || { log "ERROR: SQLite DB not found: $db"; exit 1; }
-
+db=$(locate_db "${DB_PATH:-}")
 db_size=$(du -sh "$db" | cut -f1)
 log "SQLite database located (size: ${db_size})"
 
@@ -157,42 +203,15 @@ kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2
 kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2
 
 # ── Phase 8: compress both files with zstd ───────────────────────────────────
-log "Compressing Neo4j backup with zstd (using all available cores)..."
-start=$(date +%s)
-zstd -T0 "$neo4j_backup_file" -o "$neo4j_backup_file.zst"
-end=$(date +%s)
-elapsed=$((end - start))
-
-neo4j_backup_file_zst="${neo4j_backup_file}.zst"
+neo4j_backup_file_zst=$(compress_and_report "$neo4j_backup_file" "Neo4j backup")
 neo4j_compressed_size=$(du -sh "$neo4j_backup_file_zst" | cut -f1)
-neo4j_compression_ratio=$(echo "scale=1; $(stat -c%s "$neo4j_backup_file") * 100 / $(stat -c%s "$neo4j_backup_file_zst")" | bc)
-log "Neo4j compression complete (${elapsed}s, ${neo4j_backup_size} → ${neo4j_compressed_size}, ${neo4j_compression_ratio}%)"
 
-log "Compressing SQLite backup with zstd (using all available cores)..."
-start=$(date +%s)
-zstd -f -T0 "$sqlite_backup_file" -o "$sqlite_backup_file.zst"
-end=$(date +%s)
-elapsed=$((end - start))
-
-sqlite_backup_file_zst="${sqlite_backup_file}.zst"
+sqlite_backup_file_zst=$(compress_and_report "$sqlite_backup_file" "SQLite backup")
 sqlite_compressed_size=$(du -sh "$sqlite_backup_file_zst" | cut -f1)
-sqlite_compression_ratio=$(echo "scale=1; $(stat -c%s "$sqlite_backup_file") * 100 / $(stat -c%s "$sqlite_backup_file_zst")" | bc)
-log "SQLite compression complete (${elapsed}s, ${sqlite_backup_size} → ${sqlite_compressed_size}, ${sqlite_compression_ratio}%)"
 
 # ── Phase 9: upload both to Azure ─────────────────────────────────────────────
-log "Uploading Neo4j backup to Azure..."
-start=$(date +%s)
-azcopy copy "$neo4j_backup_file_zst" "${AZURE_SAS_URL}" --overwrite=true
-end=$(date +%s)
-elapsed=$((end - start))
-log "Neo4j upload complete (${elapsed}s)"
-
-log "Uploading SQLite backup to Azure..."
-start=$(date +%s)
-azcopy copy "$sqlite_backup_file_zst" "${AZURE_SAS_URL}" --overwrite=true
-end=$(date +%s)
-elapsed=$((end - start))
-log "SQLite upload complete (${elapsed}s)"
+upload_to_azure "$neo4j_backup_file_zst" "Neo4j backup"
+upload_to_azure "$sqlite_backup_file_zst" "SQLite backup"
 
 # ── Phase 10: cleanup ────────────────────────────────────────────────────────
 log "Cleaning up uncompressed backups..."
