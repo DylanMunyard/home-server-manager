@@ -98,9 +98,9 @@ compress_and_report() {
   local backup_file="$1"
   local name="$2"
 
-  log "Compressing $name with zstd (using all available cores)..."
+  log "Compressing $name with zstd (ultra mode, long-range matching, all cores)..."
   start=$(date +%s)
-  zstd -f -T0 "$backup_file" -o "$backup_file.zst"
+  zstd -f --ultra --long -T0 "$backup_file" -o "$backup_file.zst"
   end=$(date +%s)
   elapsed=$((end - start))
 
