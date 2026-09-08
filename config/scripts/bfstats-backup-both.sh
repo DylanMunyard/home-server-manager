@@ -126,11 +126,13 @@ upload_to_azure() {
   log "$name upload complete (${elapsed}s)"
 }
 
-# Restart deployments and re-enable background processing on exit
+# Restart deployments, re-enable background processing, and cleanup backups on exit
 trap 'log "Re-enabling background processing and restarting deployments..."
       kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2 || true
       kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2 || true
-      kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2 || true' EXIT
+      kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2 || true
+      log "Cleaning up backup files from ${BACKUP_DIR}..."
+      rm -f "${BACKUP_DIR}"/bfstats-neo4j-latest.* "${BACKUP_DIR}"/bfstats-sqlite-latest.* 2>/dev/null || true' EXIT
 
 # Create backup directory if needed
 mkdir -p "$BACKUP_DIR"
@@ -212,10 +214,6 @@ sqlite_compressed_size=$(du -sh "$sqlite_backup_file_zst" | cut -f1)
 # ── Phase 9: upload both to Azure ─────────────────────────────────────────────
 upload_to_azure "$neo4j_backup_file_zst" "Neo4j backup"
 upload_to_azure "$sqlite_backup_file_zst" "SQLite backup"
-
-# ── Phase 10: cleanup ────────────────────────────────────────────────────────
-log "Cleaning up uncompressed backups..."
-rm -f "$neo4j_backup_file" "$sqlite_backup_file"
 
 echo "" >&2
 log "✓ Both backups complete and uploaded to Azure"
