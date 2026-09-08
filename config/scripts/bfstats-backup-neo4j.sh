@@ -69,8 +69,8 @@ if [ -z "$pvc_path" ]; then
     exit 1
   fi
 
-  # Search /var/lib/rancher/k3s/storage for the mounted PVC
-  pvc_path=$(find /var/lib/rancher/k3s/storage -maxdepth 1 -type d -name "*${pvc_name}" 2>/dev/null | head -1)
+  # Search mount points for the PVC (could be /var/lib/rancher/k3s/storage or /mnt or elsewhere)
+  pvc_path=$(find /var/lib/rancher/k3s/storage /mnt -maxdepth 5 -type d -name "*${pvc_name}" 2>/dev/null | head -1)
   if [ -z "$pvc_path" ]; then
     log "ERROR: Could not find mounted PVC at /var/lib/rancher/k3s/storage for ${pvc_name}"
     log "Hint: Set NEO4J_PVC_PATH parameter with the correct host path"
@@ -110,7 +110,7 @@ log "Compression complete (${elapsed}s, ${backup_size} → ${compressed_size}, $
 # ── Phase 5: upload to Azure ─────────────────────────────────────────────────
 log "Uploading to Azure..."
 start=$(date +%s)
-azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}/" --quiet
+azcopy copy "$backup_file_zst" "${AZURE_SAS_URL}" --overwrite=true
 end=$(date +%s)
 elapsed=$((end - start))
 
