@@ -129,11 +129,17 @@ upload_to_azure() {
   log "$name upload complete (${elapsed}s)"
 }
 
-# Restart deployments, re-enable background processing, and cleanup backups on exit
-trap 'log "Re-enabling background processing and restarting deployments..."
-      kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2 || true
-      kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2 || true
-      kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2 || true
+# Phase 7 restores the cluster as soon as the copies are done, so the trap only
+# has to back out an *early* exit. Guarded on a state flag rather than $? because
+# the failure mode we actually hit (azcopy eating the script off stdin) exits 0 —
+# an exit-code guard would have left Neo4j scaled to 0. Backups always cleaned up.
+restored=0
+trap 'if [ "${restored:-0}" -ne 1 ]; then
+        log "Backing out: re-enabling background processing and restarting Neo4j..."
+        kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2 || true
+        kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2 || true
+        kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2 || true
+      fi
       log "Cleaning up backup files from ${BACKUP_DIR}..."
       rm -f "${BACKUP_DIR}"/bfstats-neo4j-latest.* "${BACKUP_DIR}"/bfstats-sqlite-latest.* 2>/dev/null || true' EXIT
 
@@ -206,6 +212,7 @@ log "Copy complete (${elapsed}s, size: ${sqlite_backup_size})"
 log "Re-enabling background processing and restarting Neo4j..."
 kubectl set env deployment/"${APP_DEP}" -n "${NS}" DISABLE_BACKGROUND_PROCESSING=false >&2
 kubectl scale deployment/"${NEO4J_DEP}" -n "${NS}" --replicas=1 >&2
+restored=1   # cluster is back to normal — the trap must not redo this
 kubectl rollout status deployment/"${APP_DEP}" -n "${NS}" --timeout=120s >&2
 
 # ── Phase 8: compress both files with zstd ───────────────────────────────────
