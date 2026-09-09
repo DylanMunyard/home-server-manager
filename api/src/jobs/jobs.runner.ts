@@ -25,16 +25,13 @@ export function allStates(): Record<string, JobRunState> {
 }
 
 /**
- * `export NAME=value` lines for the job's env, resolved from process env via
- * ${VAR}. Prepended to a runbook so the remote `bash -s` sees them as real
- * env vars (the API process env doesn't propagate over SSH on its own).
+ * The job's `env`, resolved from process env via ${VAR}. Exported ahead of the
+ * runbook so the remote `bash -s` sees them as real env vars (the API process
+ * env doesn't propagate over SSH on its own). Throws on an unset ${VAR}.
  */
-function envPrelude(env: Record<string, string> | undefined): string {
-  if (!env) return '';
-  const resolved = Object.fromEntries(
-    Object.entries(env).map(([k, v]) => [k, expandEnv(v)]),
-  );
-  return exportPrelude(resolved);
+function resolveEnv(env: Record<string, string> | undefined): Record<string, string> {
+  if (!env) return {};
+  return Object.fromEntries(Object.entries(env).map(([k, v]) => [k, expandEnv(v)]));
 }
 
 /**
@@ -42,9 +39,24 @@ function envPrelude(env: Record<string, string> | undefined): string {
  * (${VAR}-resolved) followed by the runbook's params resolved against the job's
  * `params` (declared defaults fill in; `params` override on name collision).
  * Resolved per-runbook because `run` and `then` can declare different params.
+ *
+ * A declared param the job did NOT set is dropped when `env` supplies the same
+ * name. `resolveParamValues` always emits every declared param (empty string at
+ * worst, so scripts stay safe under `set -u`), so without this the default would
+ * export '' *after* the env line and silently wipe a secret the job did supply.
+ * That's the only way to hand a secret to a runbook that also declares it as an
+ * input for manual runs — bfstats-backup's AZURE_SAS_URL / E2E_GH_TOKEN. An
+ * explicit `params:` entry still wins; only the unset default yields.
  */
 function runbookPrelude(runbook: Runbook, job: JobConfig): string {
-  return envPrelude(job.env) + exportPrelude(resolveParamValues(runbook.params, job.params ?? {}));
+  const env = resolveEnv(job.env);
+  const params = resolveParamValues(runbook.params, job.params ?? {});
+  for (const name of Object.keys(params)) {
+    const explicit = job.params?.[name];
+    // '' counts as "not given" here, matching resolveParamValues' own fallback rule.
+    if (name in env && (explicit === undefined || explicit === '')) delete params[name];
+  }
+  return exportPrelude(env) + exportPrelude(params);
 }
 
 /** Did the check's result match the trigger? `when.exit` defaults to 'nonzero'. */

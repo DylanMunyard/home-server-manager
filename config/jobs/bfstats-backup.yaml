@@ -1,0 +1,42 @@
+name: bfstats backup
+description: Weekly Neo4j + SQLite backup to Azure, then republish the E2E seed DB
+schedule: "0 16 * * 5"           # Friday 16:00 AEST. The API pod pins
+                                 # TZ=Australia/Brisbane (deploy/k8s/api-deployment.yaml)
+                                 # so this reads as the wall-clock time it fires
+                                 # at — Brisbane has no DST, so it stays 16:00
+                                 # year-round. Late Friday afternoon: background
+                                 # processing pauses and Neo4j goes down for
+                                 # ~15-20 min, and nobody is looking at the site.
+target: hetzner/bfstats
+
+run: bfstats-backup-both         # does the work and prints its own report; it
+                                 # exits nonzero only on real failure, so there's
+                                 # no `when`/`then` — this is maintenance, not a
+                                 # check that signals (cf. k3s-image-prune)
+
+# Secrets. Resolved from the API process env at RUN time (.env locally, the
+# home-server-mgr-secrets Secret in k8s) and injected as `export NAME=…` ahead
+# of the script — never stored in the repo, never surfaced by GET /api/jobs.
+# Both names are also declared `# params:` on the runbook so a MANUAL run can
+# prompt for them; for a job the env value wins (see runbookPrelude).
+env:
+  AZURE_SAS_URL: ${BFSTATS_AZURE_SAS_URL}   # container SAS with write perms
+  E2E_GH_TOKEN: ${BFSTATS_E2E_GH_TOKEN}     # GitHub PAT, contents:write on the
+                                            # e2e-fixture release. Unset ⇒ the
+                                            # job errors every Friday rather than
+                                            # quietly skipping the seed DB, so
+                                            # drop this line to opt out instead.
+
+# Everything else (NAMESPACE, BACKUP_DIR, E2E_GH_REPO, the E2E window knobs)
+# takes the runbook's declared defaults — no `params:` block needed. Add one
+# here only to override a default; do NOT restate them, or a change to the
+# runbook stops reaching this job.
+
+notify:
+  on: [error]                    # no `when`, so `error` = the runbook itself
+                                 # failed. That includes the seed-DB phase: it
+                                 # runs last, after Azure has both archives, and
+                                 # its failure exits nonzero on purpose so a
+                                 # stale CI fixture is loud. A clean backup is
+                                 # silent; the report is in the Last-run tab.
+  priority: high

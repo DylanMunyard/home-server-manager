@@ -56,7 +56,7 @@ kubectl -n home-server-mgr create secret generic home-server-mgr-ssh \
 kubectl -n home-server-mgr rollout restart deployment/home-server-mgr-api
 ```
 
-This same Secret holds **two groups of keys**, both pulled in by the API pod's
+This same Secret holds **three groups of keys**, all pulled in by the API pod's
 `envFrom: secretRef` (so **no Deployment edit is needed** when you add a key):
 
 1. Any `${VAR}` interpolations used in `config/servers/*.yaml` or
@@ -70,6 +70,11 @@ This same Secret holds **two groups of keys**, both pulled in by the API pod's
    **exits at startup** if any is missing/invalid (`auth.config.ts` fails loud),
    so this Secret is effectively required, not optional. `PUBLIC_URL` is *not*
    here — it's non-secret and lives in `api-deployment.yaml`.
+3. Any `${VAR}` used in a job's `env:` block (`config/jobs/*.yaml`) — the
+   secrets a *runbook* needs, since the API process env doesn't cross SSH on its
+   own. `bfstats-backup.yaml` wants `BFSTATS_AZURE_SAS_URL` and
+   `BFSTATS_E2E_GH_TOKEN`. These resolve at run time, so an unset one is a
+   failed job run (visible in the Jobs UI + an ntfy push), never a failed boot.
 
 ```bash
 kubectl -n home-server-mgr create secret generic home-server-mgr-secrets \
@@ -96,6 +101,15 @@ merges, leaving other keys intact:
 ```bash
 kubectl -n home-server-mgr patch secret home-server-mgr-secrets --type=merge -p \
   '{"stringData":{"RADARR_API_KEY":"<key>","SONARR_API_KEY":"<key>","PLEX_TOKEN":"<token>"}}'
+kubectl -n home-server-mgr rollout restart deployment/home-server-mgr-api
+```
+
+Same form for the backup job's secrets (mind the shell — a SAS URL is full of
+`&`, so single-quote it and it's fine inside the JSON):
+
+```bash
+kubectl -n home-server-mgr patch secret home-server-mgr-secrets --type=merge -p \
+  '{"stringData":{"BFSTATS_AZURE_SAS_URL":"<container SAS URL>","BFSTATS_E2E_GH_TOKEN":"<gh PAT>"}}'
 kubectl -n home-server-mgr rollout restart deployment/home-server-mgr-api
 ```
 
@@ -220,7 +234,7 @@ mounts.
 | Secret | Keys | Used by |
 |--------|------|---------|
 | `home-server-mgr-ssh` | `id_ed25519` (and any other private keys referenced from YAML) | Mounted at `/home/app/.ssh/` |
-| `home-server-mgr-secrets` | One key per `${VAR}` in `config/servers/*.yaml` (e.g. `HETZNER_HOST`, `HETZNER_PASSPHRASE`) **plus** the auth keys `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`, `SESSION_SECRET`, `SESSION_SALT`, **plus** (optional) the self-hosted ntfy alert keys `NTFY_URL` (in-cluster: `http://ntfy.home-server-mgr.svc.cluster.local`), `NTFY_TOPIC`, `NTFY_TOKEN`. | `envFrom: secretRef` on the API pod |
+| `home-server-mgr-secrets` | One key per `${VAR}` in `config/servers/*.yaml` (e.g. `HETZNER_HOST`, `HETZNER_PASSPHRASE`) **plus** the auth keys `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ALLOWED_DISCORD_IDS`, `SESSION_SECRET`, `SESSION_SALT`, **plus** (optional) the self-hosted ntfy alert keys `NTFY_URL` (in-cluster: `http://ntfy.home-server-mgr.svc.cluster.local`), `NTFY_TOPIC`, `NTFY_TOKEN`, **plus** one key per `${VAR}` in a job's `env:` (`BFSTATS_AZURE_SAS_URL`, `BFSTATS_E2E_GH_TOKEN`). | `envFrom: secretRef` on the API pod |
 | `tunnel-credentials` | `credentials.json` (Cloudflare Tunnel creds) | Mounted at `/etc/cloudflared/creds` on the cloudflared pod |
 
 ---

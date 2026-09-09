@@ -151,8 +151,12 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 - **`env:` vs `params:`** — `env: { NAME: ${VAR} }` injects *secrets* resolved
   from process env (stored raw in `JobConfig` so the API never leaks them);
   `params:` are *literal* non-secret values for a runbook's declared
-  `# params:`. Params win on a name collision. Don't `${VAR}`-expand script
-  text — bash owns `${...}`.
+  `# params:`. An explicit `params:` entry wins on a name collision, but `env:`
+  beats a declared param the job left unset — that's how a secret reaches a
+  runbook that also declares it as an input for manual runs (see
+  `bfstats-backup`). Don't `${VAR}`-expand script text — bash owns `${...}`.
+- **`schedule:` is wall-clock Brisbane time** — croner follows the process TZ,
+  and the API pod pins `TZ=Australia/Brisbane` so prod and local dev agree.
 - Malformed job files are **skipped + logged, never thrown** (see Conventions).
 - Full semantics (`when`/`then`, notify rules, multi-target fan-out, env/params
   resolution): `api/src/jobs/CLAUDE.md`.

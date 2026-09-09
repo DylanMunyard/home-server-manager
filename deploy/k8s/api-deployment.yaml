@@ -31,6 +31,13 @@ spec:
               value: "5781"
             - name: HOME
               value: "/home/app"
+            # Job `schedule:` cron is evaluated in the API process TZ, which
+            # would otherwise be the container default (UTC) — so a job file
+            # would mean a different wall-clock time in prod than in local dev.
+            # Pin it to the user's zone so "0 16 * * 5" is Friday 4pm, as read.
+            # Brisbane has no DST, so a schedule never shifts under you.
+            - name: TZ
+              value: "Australia/Brisbane"
             # Public URL the app is reached at — used to build the OAuth
             # callback URI and (because the image bakes NODE_ENV=production) to
             # set Secure cookies. Not a secret, so it lives here. Set to your

@@ -9,6 +9,7 @@ notify semantics.
 # config/jobs/vpn-watchdog.yaml
 name: VPN watchdog
 schedule: "*/5 * * * *"      # 5-field cron, evaluated in the API process TZ
+                             # (the pod pins TZ=Australia/Brisbane — see below)
 target: bethany/proxmox      # global server id, OR a list (see multi-target below)
 run: vpn-check               # runbook executed each tick — the "check"
 when: { exit: nonzero }      # OPTIONAL: when does the check mean "remediate"?
@@ -17,6 +18,13 @@ params: { PKG: htop }        # OPTIONAL: values for the runbook's `# params:`
 notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
 ```
 
+- **`schedule:` is wall-clock in `Australia/Brisbane`.** croner is constructed
+  with no `timezone` option, so it follows the process TZ — which in a container
+  would default to UTC and make a job file mean a different time in prod than in
+  local dev. `deploy/k8s/api-deployment.yaml` pins `TZ=Australia/Brisbane` so the
+  two agree and `0 16 * * 5` is Friday 4pm as read. Brisbane has no DST, so a
+  schedule never shifts under you. Times on the wire stay UTC ISO
+  (`lastRunAt`, `nextRun()`), formatted client-side — TZ doesn't reach the UI.
 - **In-memory scheduler, no persistence by design.** The scheduler lives in the
   API process (`jobs.scheduler.ts`, croner); on restart, schedules start fresh.
   No DB, no state file — same clone-and-go property as the rest. Holds
@@ -102,6 +110,16 @@ notify: { on: [action, error], priority: high }   # OPTIONAL: ntfy alerts
   stored RAW in `JobConfig` (resolved only at run time) so `GET /api/jobs` never
   leaks the secret; an unset `${VAR}` surfaces as a per-run error (in the job's
   last-run state + logs), never a failed boot.
+- **`env:` also supplies a runbook's declared param when `params:` doesn't.**
+  That's how a secret reaches a runbook that *also* declares it as a
+  `# params:` input for manual runs (`bfstats-backup`'s `AZURE_SAS_URL` /
+  `E2E_GH_TOKEN`) — you can't put it in `params:` without committing it to git
+  and exposing it on `GET /api/jobs`. `runbookPrelude` drops a declared param
+  from the params prelude when `env` provides that name and `params:` doesn't,
+  because `resolveParamValues` emits EVERY declared param (empty string at
+  worst, for `set -u`) and that `export NAME=''` lands *after* the env line —
+  it would silently wipe the secret. An explicit `params:` entry still wins;
+  only the unset default yields. If you touch either prelude, keep that order.
 - **`params:` supplies a runbook's declared inputs.** Optional
   `params: { NAME: value }` — *literal* values for the target runbook's
   `# params:` (see `api/src/runbooks/CLAUDE.md`). Resolved per-runbook at run
