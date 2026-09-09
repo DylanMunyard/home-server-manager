@@ -2,6 +2,7 @@ import type { NodeSnapshot, Thresholds } from '../shared/api.ts';
 import { MetricChart, type Point } from './MetricChart.tsx';
 import { InspectPanel } from './InspectPanel.tsx';
 import { K8sPanel } from './K8sPanel.tsx';
+import { ReportsPanel } from '../reports/ReportsPanel.tsx';
 import { cpuSeries, memSeries, tempSeries, diskSeries, pathSeries, latest, mountsOf, pathsOf, pct } from './series.ts';
 
 const FULL_H = 150;
@@ -89,6 +90,10 @@ export function NodeDetail({ node, thresholds, onClose }: {
       {(node.inspect ?? []).length > 0 && (
         <InspectPanel serverId={node.id} actions={node.inspect!} />
       )}
+
+      {/* Self-hiding: renders nothing unless CI has pushed a report for this
+          node, so there's no config to opt in and no empty section elsewhere. */}
+      <ReportsPanel serverId={node.id} />
     </div>
   );
 }

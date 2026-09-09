@@ -1082,6 +1082,21 @@ button[data-variant="backup"]:hover { background: var(--ink); color: var(--bg); 
  * needs a real layout box to initialise into. */
 .nd-inspect .terminal-wrap { height: 300px; }
 
+/* ── e2e reports (CI-pushed Playwright reports, pinned to a node) ── */
+.nd-reports { margin-top: 18px; border: 1px solid var(--line-soft); padding: 10px 12px 12px; }
+.nd-reports-err { font-size: 11px; color: var(--err); }
+.nd-report { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.nd-report:first-of-type { border-top: none; }
+.nd-report-status {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+  padding: 2px 7px; border: 1px solid currentColor; color: var(--ink-3); flex: none;
+}
+.nd-report-status[data-status="failed"] { color: var(--err); }
+.nd-report-status[data-status="passed"] { color: var(--ok); }
+.nd-report-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.nd-report-open { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.nd-report-sub { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
 /* ── k3s panel (rich workload drill-in, dashboard `panels:`) ────── */
 .k8s-panel { margin-top: 18px; border: 1px solid var(--line-soft); padding: 10px 12px 12px; }
 .k8s-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -1171,6 +1186,11 @@ button[data-variant="backup"]:hover { background: var(--ink); color: var(--bg); 
 .m-app .k8s-row .k8s-kind, .m-app .k8s-row .k8s-health { display: none; }
 .m-app .k8s-pods-row { grid-template-columns: minmax(0, 1fr) 76px 76px; gap: 10px; }
 .m-app .k8s-pods-row .k8s-age { display: none; }
+/* Reports inherit the cream palette from .m-app .dash. On a phone the row's
+ * three cells don't fit side by side, so let it wrap and give the provenance
+ * the full width — the report link is the only tap target that matters. */
+.m-app .nd-report { flex-wrap: wrap; gap: 8px 10px; }
+.m-app .nd-report-meta { flex-basis: 100%; order: 3; }
 .m-jntfy .nf.pri { border-style: solid; border-color: var(--m-line); background: var(--m-paper-2); }
 
 /* ── AI investigation transcript (desktop) ─────────────────────── */

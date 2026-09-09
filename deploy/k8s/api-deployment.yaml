@@ -1,4 +1,25 @@
 ---
+# Storage for CI-pushed Playwright reports (api/src/reports/). This is the only
+# persistent state the app keeps outside config/ — disposable CI output under a
+# retention cap, not application state. An empty volume is a valid cold start,
+# so the clone-and-go property survives: nothing here has to be seeded.
+#
+# local-path is k3s's default provisioner, so the volume is node-local; the
+# nodeSelector below already pins the pod to one node. 5Gi is generous — the
+# retention cap (REPORTS_KEEP, default 10 per node) is the real limit.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: home-server-mgr-reports
+  namespace: home-server-mgr
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,6 +27,11 @@ metadata:
   namespace: home-server-mgr
 spec:
   replicas: 1
+  # The reports PVC is ReadWriteOnce, so a RollingUpdate would have the new pod
+  # waiting on a volume the outgoing pod still holds. Recreate takes the brief
+  # downtime instead of risking a stuck rollout.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: home-server-mgr-api
@@ -44,6 +70,12 @@ spec:
             # real domain.
             - name: PUBLIC_URL
               value: "https://mgr.munyard.dev"
+            # Where CI-pushed Playwright reports are stored (the PVC above).
+            # Without this the API would fall back to a path relative to the
+            # compiled dist/, which isn't the volume. REPORTS_INGEST_TOKEN is a
+            # secret and rides in via the envFrom below; unset ⇒ ingest is off.
+            - name: REPORTS_DIR
+              value: "/data/reports"
           # envFrom pulls every key in home-server-mgr-secrets in as an env
           # var. Add a new ${VAR} to config/servers/*.yaml? Just add the same
           # key to the Secret — no Deployment edit needed. The Discord OAuth +
@@ -88,6 +120,10 @@ spec:
             - name: ssh-keys
               mountPath: /home/app/.ssh
               readOnly: true
+            # Writable, unlike every mount above — this is where uploaded
+            # reports are extracted to and served from.
+            - name: reports
+              mountPath: /data/reports
           resources:
             requests:
               memory: "160Mi"
@@ -124,6 +160,9 @@ spec:
           secret:
             secretName: home-server-mgr-ssh
             defaultMode: 0400
+        - name: reports
+          persistentVolumeClaim:
+            claimName: home-server-mgr-reports
 ---
 apiVersion: v1
 kind: Service

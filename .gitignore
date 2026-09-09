@@ -6,3 +6,5 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .vite/
+# Local-dev store for CI-pushed Playwright reports (REPORTS_DIR default).
+.reports/

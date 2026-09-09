@@ -36,9 +36,15 @@ even when you're only touching its `ui/src/` side.
   `src/ssh/`, `src/terminal/`. Never `src/features/...`, never `Controllers/`
   / `Services/` / `Models/` type-grouping. Filenames inside say what they are
   (`servers.routes.ts`, `servers.loader.ts`, `useServers.ts`).
-- **File-based config only.** No database, no Redis, no persistent state outside
-  the `config/` dir. The "clone the repo and go" property is load-bearing —
+- **File-based config only.** No database, no Redis. All *configuration* lives in
+  `config/` as files. The "clone the repo and go" property is load-bearing —
   preserve it on every change.
+  - **One carve-out: the E2E report volume** (`api/src/reports/`, mounted at
+    `/data/reports`). It holds disposable CI output under a retention cap, not
+    application state — nothing reads it at boot, an empty volume is a valid
+    cold start, and deleting the whole thing loses nothing but old reports. If
+    you need durable storage for something else, that's a scope decision to
+    confirm first; this is not a general licence to persist. Still no DB.
 - **No backwards-compatibility shims.** This is a personal tool — change the
   shape, update the consumers, move on. Don't introduce feature flags or
   legacy aliases.
@@ -215,6 +221,33 @@ delete. Config is `config/media.yaml` (urls + `${VAR}` keys; see `.env.example`)
   a required `confirm: true` body field server-side.
 - Full contract (join keys, cache semantics, delete invariants):
   `api/src/media/CLAUDE.md`.
+
+## E2E reports — CI-pushed Playwright reports, pinned to a node
+
+CI POSTs a failed Playwright HTML report here; the app hosts it behind the
+existing Discord login and pushes an ntfy alert that opens it on tap. Solves
+"the report is a GitHub artifact you have to download and run `show-report` on",
+which meant the failure videos never actually got watched. Engine
+`api/src/reports/`; UI `ui/src/reports/` (a self-hiding section in the dashboard
+node detail, so it rides the shared `Dashboard` into both shells).
+
+- **Every report is anchored to a node.** `?node=<group>/<server>` is validated
+  against `config/servers` on ingest — an unknown node is a 400. That's what
+  lets the node detail list them: bfstats' E2E lands on `hetzner/bfstats`,
+  beside that node's CPU charts and k3s panel.
+- **The ingest route is the one thing not behind Discord OAuth.** GitHub Actions
+  can't do an interactive login, so `POST /api/reports/ingest` is an **exact**
+  public-path carve-out in `auth.plugin.ts` guarded solely by
+  `REPORTS_INGEST_TOKEN` (timing-safe compare; unset ⇒ 503, never a default).
+  Listing, deleting and *viewing* all still require a session.
+- **Persistent, deliberately** — the `/data/reports` PVC is the documented
+  exception to "no state outside `config/`" (see Conventions).
+- **Retention is per node** (`REPORTS_KEEP`, default 10), pruned on each upload.
+  These are read-once artifacts; the UI has a delete button for the same reason.
+- Env-driven and lenient like ntfy/media — no ingest token just closes the
+  upload route, the API still boots and old reports stay viewable.
+- Full contract (ingest params, extraction hardening, the CI step in the bfstats
+  repo): `api/src/reports/CLAUDE.md`.
 
 ## Secrets
 

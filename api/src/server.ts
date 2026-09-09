@@ -17,6 +17,7 @@ import { k8sRoutes } from './k8s/k8s.routes.js';
 import { aiRoutes } from './ai/ai.routes.js';
 import { mediaRoutes } from './media/media.routes.js';
 import { backupRoutes } from './backup/backup.routes.js';
+import { reportsRoutes } from './reports/reports.routes.js';
 
 const app = Fastify({ logger: true });
 
@@ -41,6 +42,9 @@ await app.register(aiRoutes);
 // first GET) and the config loader never throws — can't take down the API.
 await app.register(mediaRoutes);
 await app.register(backupRoutes);
+// E2E report hosting. Auxiliary too: the only boot-time work is mkdir'ing the
+// report dir, and an unset ingest token just closes the upload route.
+await app.register(reportsRoutes);
 
 app.get('/api/health', async () => ({ ok: true }));
 

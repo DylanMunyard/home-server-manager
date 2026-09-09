@@ -20,10 +20,18 @@ declare module 'fastify' {
 
 // Paths reachable without a session. Everything else (all /api/* and /ws/*) is
 // gated by the onRequest hook below.
+//
+// The reports carve-out is EXACT, not a prefix: GitHub Actions can't do an
+// interactive Discord login, so CI authenticates the upload with a bearer token
+// the route checks itself (reports.routes.ts). Everything else under
+// /api/reports — listing, deleting, and viewing a report — stays behind the
+// session. Keep it exact; a `startsWith` here would publish the reports.
 function isPublicPath(url: string): boolean {
   // Strip query string before matching.
   const path = url.split('?')[0];
-  return path === '/api/health' || path.startsWith('/api/auth/');
+  return path === '/api/health'
+    || path === '/api/reports/ingest'
+    || path.startsWith('/api/auth/');
 }
 
 export function getUser(req: FastifyRequest): SessionUser | undefined {

@@ -490,6 +490,43 @@ export async function testAlert(
   return r.json();
 }
 
+// ── E2E reports ─────────────────────────────────────────────────
+// Playwright HTML reports pushed up by CI and pinned to the node the app under
+// test runs on. See api/src/reports/CLAUDE.md.
+
+export type Report = {
+  id: string;
+  node: string;          // "<group>/<server>" — always a real node
+  repo?: string;
+  pr?: number;
+  branch?: string;
+  sha?: string;
+  runUrl?: string;
+  title?: string;
+  status: 'failed' | 'passed';
+  bytes: number;
+  createdAt: string;     // ISO 8601
+};
+
+export async function fetchReports(node: string): Promise<Report[]> {
+  const r = await apiGet(`/api/reports?node=${encodeURIComponent(node)}`, 'failed to load reports');
+  return (await r.json()).reports;
+}
+
+export async function deleteReport(id: string): Promise<void> {
+  const r = await fetch(`/api/reports/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (r.status === 401) {
+    window.location.href = '/api/auth/login';
+    return new Promise(() => {});
+  }
+  if (!r.ok) throw new Error('failed to delete report');
+}
+
+/** Where the report itself is served. Same origin, so the session cookie rides along. */
+export function reportUrl(id: string): string {
+  return `/api/reports/view/${id}/report/index.html`;
+}
+
 /**
  * Trigger a browser download of a bfstats database backup streamed live over
  * SSH from the server. Opens the backup route URL in a hidden <a> so the

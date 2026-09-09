@@ -7,6 +7,11 @@ export type Alert = {
   body: string;
   priority?: NtfyPriority;
   tags?: string[]; // ntfy emoji shortcodes / tags, e.g. ['warning']
+  /**
+   * URL opened when the push is tapped. Turns a "something broke" notification
+   * into a one-tap route to the evidence (e.g. the hosted Playwright report).
+   */
+  click?: string;
 };
 
 // ntfy rejects very large bodies; keep raw script output well under the limit.
@@ -60,6 +65,7 @@ export async function sendAlert(alert: Alert): Promise<SendResult> {
     payload.priority = map[alert.priority];
   }
   if (alert.tags?.length) payload.tags = alert.tags;
+  if (alert.click) payload.click = alert.click;
 
   try {
     const res = await fetch(cfg.url, {
