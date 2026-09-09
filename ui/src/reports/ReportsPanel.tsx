@@ -65,7 +65,7 @@ export function ReportsPanel({ serverId }: { serverId: string }) {
             </a>
             <span className="nd-report-sub">
               {ago(r.createdAt)} · {size(r.bytes)}
-              {r.runUrl && <> · <a href={r.runUrl} target="_blank" rel="noreferrer">ci run</a></>}
+              {r.runUrl && <> · <a className="nd-report-ci" href={r.runUrl} target="_blank" rel="noreferrer">ci run</a></>}
             </span>
           </div>
           <button

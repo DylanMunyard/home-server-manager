@@ -1094,8 +1094,16 @@ button[data-variant="backup"]:hover { background: var(--ink); color: var(--bg); 
 .nd-report-status[data-status="failed"] { color: var(--err); }
 .nd-report-status[data-status="passed"] { color: var(--ok); }
 .nd-report-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.nd-report-open { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+/* There is no global `a` rule in this stylesheet — every anchor states its own
+ * colour (cf. .media-link, .m-signout). Without :visited pinned too, the UA
+ * default made these purple-on-dark-blue and unreadable. */
+.nd-report-open,
+.nd-report-open:visited { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; color: var(--ink); text-decoration: none; }
+.nd-report-open:hover { color: var(--accent-2); text-decoration: underline; }
 .nd-report-sub { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.nd-report-ci,
+.nd-report-ci:visited { color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
+.nd-report-ci:hover { color: var(--ink); }
 
 /* ── k3s panel (rich workload drill-in, dashboard `panels:`) ────── */
 .k8s-panel { margin-top: 18px; border: 1px solid var(--line-soft); padding: 10px 12px 12px; }
